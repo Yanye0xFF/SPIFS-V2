@@ -1,0 +1,116 @@
+# depslib dependency file v1.0
+1581229625 source:e:\cppprojects\w25q32emu\diskio.c
+	"diskio.h"
+
+1581311631 source:e:\cppprojects\w25q32emu\main.c
+	<stdio.h>
+	"spifs.h"
+	"w25q32.h"
+	"misc.h"
+	"string.h"
+	<time.h>
+
+1581304179 e:\cppprojects\w25q32emu\spifs.h
+	<stdint.h>
+	<stdlib.h>
+	<stdio.h>
+	"string.h"
+	"misc.h"
+	"diskio.h"
+
+1581225327 e:\cppprojects\w25q32emu\w25q32.h
+	<stdio.h>
+	<stdint.h>
+	<stdlib.h>
+	<string.h>
+
+1581311413 source:e:\cppprojects\w25q32emu\spifs.c
+	"spifs.h"
+
+1581229692 source:e:\cppprojects\w25q32emu\w25q32.c
+	"w25q32.h"
+
+1581229726 e:\cppprojects\w25q32emu\diskio.h
+	"stdint.h"
+	"w25q32.h"
+	"spifs.h"
+
+1581145368 e:\cppprojects\w25q32emu\misc.h
+	"stdint.h"
+
+1581145872 source:e:\cppprojects\w25q32emu\misc.c
+	"misc.h"
+
+1581229625 source:e:\cppworkspace\w25q32emu\diskio.c
+	"diskio.h"
+
+1581229726 e:\cppworkspace\w25q32emu\diskio.h
+	"stdint.h"
+	"w25q32.h"
+	"spifs.h"
+
+1598323302 e:\cppworkspace\w25q32emu\w25q32.h
+	<stdio.h>
+	<stdint.h>
+	<stdlib.h>
+	<string.h>
+
+1581304179 e:\cppworkspace\w25q32emu\spifs.h
+	<stdint.h>
+	<stdlib.h>
+	<stdio.h>
+	"string.h"
+	"misc.h"
+	"diskio.h"
+
+1581145368 e:\cppworkspace\w25q32emu\misc.h
+	"stdint.h"
+
+1598323243 source:e:\cppworkspace\w25q32emu\main.c
+	<stdio.h>
+	"spifs.h"
+	"w25q32.h"
+	"misc.h"
+	"string.h"
+	<time.h>
+
+1581145872 source:e:\cppworkspace\w25q32emu\misc.c
+	"misc.h"
+
+1581311413 source:e:\cppworkspace\w25q32emu\spifs.c
+	"spifs.h"
+
+1599025209 source:e:\cppworkspace\w25q32emuex\diskio.c
+	"diskio.h"
+
+1599025218 e:\cppworkspace\w25q32emuex\diskio.h
+	"stdint.h"
+	"w25q32.h"
+	"spifs.h"
+
+1599007094 e:\cppworkspace\w25q32emuex\w25q32.h
+	<stdio.h>
+	<stdint.h>
+	<stdlib.h>
+	<string.h>
+
+1599030726 e:\cppworkspace\w25q32emuex\spifs.h
+	<stdint.h>
+	<stdlib.h>
+	<stdio.h>
+	"string.h"
+	"diskio.h"
+
+1599032364 source:e:\cppworkspace\w25q32emuex\main.c
+	<stdio.h>
+	"spifs.h"
+	"w25q32.h"
+	"string.h"
+	<time.h>
+
+1599030930 source:e:\cppworkspace\w25q32emuex\spifs.c
+	"spifs.h"
+
+1599007083 source:e:\cppworkspace\w25q32emuex\w25q32.c
+	"w25q32.h"
+
