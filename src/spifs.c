@@ -45,7 +45,7 @@ BOOL make_file(File *file, char *filename, char *extname) {
     if((os_strlen(filename) > FILENAME_SIZE) || (os_strlen(extname) > EXTNAME_SIZE)) {
         return FALSE;
     }
-    os_memset(file, 0xFF, sizeof(File));
+    os_memset(file, EMPTY_BYTE_VALUE, sizeof(File));
     os_memcpy(file->filename, filename, os_strlen(filename));
     os_memcpy(file->extname, extname, os_strlen(extname));
     return TRUE;
@@ -86,18 +86,24 @@ Result create_file(File *file, FileInfo *finfo) {
         goto FIND_FB_SPACE;
     }
     // clear fileblock buffer
-    os_memset(fb_buffer, 0xFF, FILEBLOCK_SIZE);
+    os_memset(fb_buffer, EMPTY_BYTE_VALUE, FILEBLOCK_SIZE);
     // FileBlock已四字节对齐
     fb = (FileBlock *)fb_buffer;
     os_memcpy(fb->filename, file->filename, strlen_ext(file->filename, FILENAME));
     os_memcpy(fb->extname, file->extname, strlen_ext(file->extname, EXTNAME));
     os_memcpy(&(fb->info), finfo, sizeof(FileInfo));
+    // 适配非空File创建，适用于重命名功能
+    if(file->cluster != EMPTY_INT_VALUE && file->length != EMPTY_INT_VALUE) {
+        os_memcpy(&(fb->cluster), &(file->cluster), sizeof(uint32_t));
+        os_memcpy(&(fb->length), &(file->length), sizeof(uint32_t));
+    }else {
+        file->cluster = fb->cluster;
+        file->length = fb->length;
+    }
     // write to flash
     write_fileblock(addr_start, fb);
     // copy FileBlock address to File
     file->block = addr_start;
-    file->cluster = fb->cluster;
-    file->length = fb->length;
 
     os_free(fb_buffer);
     return CREATE_FILEBLOCK_SUCCESS;
@@ -119,16 +125,17 @@ Result write_file(File *file, uint8_t *buffer, uint32_t length, WriteMethod meth
     uint32_t *sector_list, sectors;
     uint32_t leftsize = 0, write_size;
 
-    if(file->block == 0xFFFFFFFF) return FILE_UNALLOCATED;
+    if(file->block == EMPTY_INT_VALUE) return FILE_UNALLOCATED;
 
     // 文件存在数据则标记数据扇区
-    if(method == OVERRIDE && file->cluster != 0xFFFFFFFF) {
+    if(method == OVERRIDE && file->cluster != EMPTY_INT_VALUE) {
         // 根据链表标记文件占用扇区废弃
-        while(file->cluster != 0xFFFFFFFF) {
+        while(file->cluster != EMPTY_INT_VALUE) {
             update_sector_mark(file->cluster, SECTOR_DISCARD_FLAG);
             spi_flash_read((file->cluster + DATA_AREA_SIZE + SECTOR_MARK_SIZE), &temp, sizeof(uint32_t));
             file->cluster = temp;
         }
+        // TODO fix
         read_finfo(file, &finfo);
         // 标记文件索引表对应文件块失效，但不执行擦除操作
         write_fileblock_state(file->block, FSTATE_DEPRECATE);
@@ -137,17 +144,17 @@ Result write_file(File *file, uint8_t *buffer, uint32_t length, WriteMethod meth
             return NO_FILEBLOCK_SPACE;
         }
     }else {
-        if(file->cluster != 0xFFFFFFFF) {
+        if(file->cluster != EMPTY_INT_VALUE) {
             write_addr = file->cluster;
-            while(write_addr != 0xFFFFFFFF) {
+            while(write_addr != EMPTY_INT_VALUE) {
                 spi_flash_read((write_addr + DATA_AREA_SIZE + SECTOR_MARK_SIZE), &temp, sizeof(uint32_t));
-                if(temp == 0xFFFFFFFF) {
+                if(temp == EMPTY_INT_VALUE) {
                     break;
                 }
                 write_addr = temp;
             }
             // 追加写
-            temp = ((file->length == 0xFFFFFFFF) ? 0 : file->length) % DATA_AREA_SIZE;
+            temp = ((file->length == EMPTY_INT_VALUE) ? 0 : file->length) % DATA_AREA_SIZE;
             leftsize = DATA_AREA_SIZE - temp;
             write_addr += (SECTOR_MARK_SIZE + temp);
             write_size = (length < leftsize) ? length : leftsize;
@@ -162,7 +169,7 @@ Result write_file(File *file, uint8_t *buffer, uint32_t length, WriteMethod meth
                     offset += (write_size - align);
                 }
                 // 填充剩余不足四字节部分
-                temp = 0xFFFFFFFF;
+                temp = EMPTY_INT_VALUE;
                 memcpy(&temp, (buffer + offset), align);
                 spi_flash_write((write_addr + (write_size - align)), &temp, sizeof(uint32_t));
             }
@@ -197,7 +204,7 @@ Result write_file(File *file, uint8_t *buffer, uint32_t length, WriteMethod meth
         file->cluster = *(sector_list + 0);
         file->length = length;
     }else {
-        if(file->cluster == 0xFFFFFFFF) {
+        if(file->cluster == EMPTY_INT_VALUE) {
             write_fileblock_cluster(file->block, *(sector_list + 0));
             file->cluster = *(sector_list + 0);
             file->length = length;
@@ -232,7 +239,7 @@ Result write_file(File *file, uint8_t *buffer, uint32_t length, WriteMethod meth
                     offset += (length - align);
                 }
                 // 填充剩余不足四字节部分
-                temp = 0xFFFFFFFF;
+                temp = EMPTY_INT_VALUE;
                 memcpy(&temp, (buffer + offset), align);
                 spi_flash_write((write_addr + (length - align)), &temp, sizeof(uint32_t));
             }
@@ -246,7 +253,7 @@ Result write_file(File *file, uint8_t *buffer, uint32_t length, WriteMethod meth
  * @param *file 文件指针
  * */
 Result write_finish(File *file) {
-    if(file->block == 0xFFFFFFFF) return FILE_UNALLOCATED;
+    if(file->block == EMPTY_INT_VALUE) return FILE_UNALLOCATED;
     write_fileblock_length(file->block, file->length);
     return APPEND_FILE_FINISH;
 }
@@ -329,8 +336,8 @@ BOOL read_file(File *file, uint32_t offset, uint8_t *buffer, uint32_t length) {
 /**
  * @brief 根据文件名+拓展名打开文件
  * @param file 文件指针
- * @param filename 文件名
- * @param extname 拓展名
+ * @param filename 文件名 没有名字可以传入空字符串 "" 或者 NULL
+ * @param extname 拓展名 没有名字可以传入空字符串 "" 或者 NULL
  * @return 0:未找到该文件, 1:成功获取文件
  * */
 BOOL open_file(File *file, char *filename, char *extname) {
@@ -365,6 +372,47 @@ BOOL open_file(File *file, char *filename, char *extname) {
 }
 
 /**
+ * @brief 重命名文件
+ * @param *file 文件指针
+ * @param *filename 文件名
+ * @param *extname 拓展名
+ * @return Result 成功: FILE_RENAME_SUCCESS, 其他结果码见Result定义
+ */
+Result rename_file(File *file, char *filename, char *extname) {
+    FileInfo fileinfo;
+    uint32_t fnamelen, extnamelen;
+
+    if(file == NULL || file->block == EMPTY_INT_VALUE) {
+        return FILE_NOT_EXIST;
+    }
+    // 读出文件状态字
+    read_finfo(file, &fileinfo);
+    // 文件状态检查
+    if(fileinfo.state.del & fileinfo.state.dep & fileinfo.state.rw & fileinfo.state.sys) {
+        fnamelen = os_strlen(filename);
+        extnamelen = os_strlen(extname);
+        // 输入文件名长度检查
+        if(fnamelen > FILENAME_SIZE || extnamelen > EXTNAME_SIZE) {
+            return FILENAME_INCORRECT;
+        }
+        if(spifs_avail_files() > 0) {
+            // 标记文件索引表原始文件对应文件块失效，但不执行擦除操作
+            write_fileblock_state(file->block, FSTATE_DEPRECATE);
+            // 复制文件名到file
+            os_memcpy(file->filename, filename, fnamelen);
+            os_memcpy(file->extname, extname, extnamelen);
+            // 填充末尾
+            os_memset((file->filename + fnamelen), EMPTY_BYTE_VALUE, (FILENAME_SIZE - fnamelen));
+            os_memset((file->extname + extnamelen), EMPTY_BYTE_VALUE, (EXTNAME_SIZE - extnamelen));
+            // 重新创建文件索引块
+            return (CREATE_FILEBLOCK_SUCCESS == create_file(file, &fileinfo)) ? FILE_RENAME_SUCCESS : NO_FILEBLOCK_SPACE;
+        }
+        return NO_FILEBLOCK_SPACE;
+    }
+    return FILE_CANNOT_RENAME;
+}
+
+/**
  * @brief 返回文件列表, 以链表形式存储, 使用完毕务必调用recycle_filelist()释放文件
  * @return FileList * 文件列表链表
  * */
@@ -380,7 +428,7 @@ FileList *list_file() {
         while(addr_end - addr_start >= FILEBLOCK_SIZE) {
             spi_flash_read(addr_start, (uint32_t *)cache, FILEBLOCK_SIZE);
             fb = (FileBlock *)cache;
-            if((fb->info.state.del != 0) && (fb->info.state.dep != 0) && (fb->cluster != 0xFFFFFFFF)) {
+            if((fb->info.state.del != 0) && (fb->info.state.dep != 0) && (fb->cluster != EMPTY_INT_VALUE)) {
                 FileList *item = (FileList *)os_malloc(sizeof(FileList));
                 os_memcpy(item->file.filename, fb->filename, FILENAME_SIZE);
                 os_memcpy(item->file.extname, fb->extname, EXTNAME_SIZE);
@@ -440,7 +488,7 @@ static BOOL find_empty_sector(uint32_t *secList, uint32_t nums) {
     uint32_t sector_index, sector_mark, i = 0;
     for(sector_index = DATA_SECTOR_START; (i < nums) && (sector_index < (DATA_SECTOR_END + 1)); sector_index++) {
         spi_flash_read((sector_index * SECTOR_SIZE), &sector_mark, sizeof(uint32_t));
-        if(sector_mark == 0xFFFFFFFF) {
+        if(sector_mark == EMPTY_INT_VALUE) {
             *(secList + i) = (sector_index * SECTOR_SIZE);
             i++;
         }
@@ -484,7 +532,7 @@ void spifs_gc() {
             // 文件被标识为删除
             if((fb->info.state.del) == 0) {
                 // 根据链表擦除文件占用扇区
-                while(fb->cluster != 0xFFFFFFFF) {
+                while(fb->cluster != EMPTY_INT_VALUE) {
                     spi_flash_read((fb->cluster + DATA_AREA_SIZE + SECTOR_MARK_SIZE), &addr_cluster, sizeof(uint32_t));
                     spi_flash_erase_sector(fb->cluster / SECTOR_SIZE);
                     fb->cluster = addr_cluster;
@@ -500,7 +548,7 @@ void spifs_gc() {
                 rewrite = TRUE;
             }
             // 创建文件但未填充数据, 空文件索引
-            if(fb->cluster == 0xFFFFFFFF) {
+            if(fb->cluster == EMPTY_INT_VALUE) {
                 // 清除文件索引信息
                 clear_fileblock(sector_buffer, offset);
                 rewrite = TRUE;
@@ -553,7 +601,7 @@ uint32_t spifs_avail() {
     uint32_t i, temp, avail = 0;
     for(i = DATA_SECTOR_START; i < (DATA_SECTOR_END + 1); i++) {
         spi_flash_read(i * SECTOR_SIZE, &temp, sizeof(uint32_t));
-        if(temp == 0xFFFFFFFF) {
+        if(temp == EMPTY_INT_VALUE) {
             avail++;
         }
     }
@@ -582,7 +630,6 @@ uint32_t spifs_avail_files() {
     return avail;
 }
 
-
 /**
  * @brief 获取文件系统版本
  * @return uint16 低字节子版本号,高字节主版本号
@@ -590,7 +637,6 @@ uint32_t spifs_avail_files() {
 uint16_t spifs_get_version() {
     return ((MAJOR_VERSION << 8) | MINOR_VERSION);
 }
-
 
 /**
  * @brief 字符串长度计算，以0xFF为结束符，限制长度
@@ -601,21 +647,25 @@ uint16_t spifs_get_version() {
 static uint32_t strlen_ext(uint8_t *str, FileNameType type) {
     uint32_t max = ((type == FILENAME) ? FILENAME_SIZE : EXTNAME_SIZE);
     uint32_t i = 0;
-    for(; ((i < max) && (*str != 0xFF)); i++, str++);
+    for(; ((i < max) && (*str != EMPTY_BYTE_VALUE)); i++, str++);
     return i;
 }
 
 /**
  * @brief 比较文件索引块文件名与输入文件名
  * @param *fsname 文件块的文件名,以0xFF结尾
- * @param *inname 输入的文件名,以\0结尾
+ * @param *inname 输入的文件名,以\0结尾, 没有名字可以传入空字符串 "" 或者 NULL
  * @param type 文件名类型: FILENAME:文件名, EXTNAME:拓展名
  * @return TRUE:文件名相同, FALSE:文件名不同
  * */
 static BOOL fname_equals(uint8_t *fsname, char *inname, FileNameType type) {
     uint32_t i = 0, limit = ((type == FILENAME) ? FILENAME_SIZE : EXTNAME_SIZE);
     uint32_t fsname_length = strlen_ext(fsname, type);
-    uint32_t inname_length = os_strlen(inname);
+    uint32_t inname_length = 0;
+    // NULL 检查
+    if(inname != NULL) {
+    	inname_length = os_strlen(inname);
+    }
     if((inname_length > limit) || (fsname_length != inname_length)) {
         return FALSE;
     }
@@ -632,7 +682,7 @@ static BOOL fname_equals(uint8_t *fsname, char *inname, FileNameType type) {
  */
 static BOOL fb_has_name(uint8_t *fb_buffer) {
     for(uint32_t i = 0; i < FILENAME_FULLSIZE; i++) {
-        if(*(fb_buffer + i) != 0xFF) return TRUE;
+        if(*(fb_buffer + i) != EMPTY_BYTE_VALUE) return TRUE;
     }
     return FALSE;
 }

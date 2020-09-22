@@ -31,7 +31,7 @@ typedef struct _file_state {
     uint8_t rw : 1;
     // system 0:系统文件, 1:普通文件
     uint8_t sys : 1;
-    // 未使用状态字
+    // 未使用状态字, 可根据需求自定义
     uint8_t reserve : 4;
 } FileState;
 
@@ -62,11 +62,11 @@ typedef struct _file_block {
 
 // 文件信息结构(24字节)
 typedef struct _file {
-    uint8_t filename[8]; // 文件名
-    uint8_t extname[4]; // 拓展名
-    uint32_t block;    // 文件索引记录地址
-    uint32_t cluster; // 文件内容起始扇区地址
-    uint32_t length; // 文件大小
+    uint8_t filename[8];  // 文件名
+    uint8_t extname[4];  // 拓展名
+    uint32_t block;     // 文件索引记录地址
+    uint32_t cluster;  // 文件内容起始扇区地址
+    uint32_t length;  // 文件大小
 } File;
 
 // 文件信息链表
@@ -95,7 +95,15 @@ typedef enum _result {
     // 文件未分配
     FILE_UNALLOCATED,
     // 文件不能被追加写，例如系统文件/只读文件/被删除的文件/过期的文件
-    FILE_CANNOT_APPEND
+    FILE_CANNOT_APPEND,
+    // 空文件
+    FILE_NOT_EXIST,
+    // 文件不能被重命名，例如系统文件/只读文件/被删除的文件/过期的文件
+    FILE_CANNOT_RENAME,
+    // 文件超出长度
+    FILENAME_INCORRECT,
+    // 文件重命名成功
+    FILE_RENAME_SUCCESS
 } Result;
 
 /**
@@ -146,6 +154,9 @@ typedef enum _write_method {
 #define SECTOR_INUSE_FLAG        (0xFF00FF00)
 // 扇区数据废弃标记
 #define SECTOR_DISCARD_FLAG      (0xFF00CC00)
+// 空数据值, 适配flash擦除后全为1
+#define EMPTY_INT_VALUE          (0xFFFFFFFF)
+#define EMPTY_BYTE_VALUE         (0xFF)
 
 // Flash页大小(字节)
 #define PAGE_SIZE          256
@@ -181,6 +192,8 @@ Result write_finish(File *file);
 BOOL read_file(File *file, uint32_t offset, uint8_t *buffer, uint32_t size);
 
 BOOL open_file(File *file, char *filename, char *extname);
+
+Result rename_file(File *file, char *filename, char *extname);
 
 void delete_file(File *file);
 

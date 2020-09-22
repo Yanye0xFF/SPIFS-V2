@@ -11,8 +11,11 @@ void disp_list(FileList *list);
 
 static void test_create();
 static void read_test();
+static void rename_test();
 
 int main(int argc, char **argv) {
+
+    FileList *list;
     uint16_t spifs_version;
 
     w25q32_allocate();
@@ -28,6 +31,24 @@ int main(int argc, char **argv) {
 
     read_test();
 
+    rename_test();
+
+    // 文件列出
+    list = list_file();
+    disp_list(list);
+    recycle_filelist(list);
+
+    // 剩余空间
+    uint32_t availFiles = spifs_avail_files();
+    printf("> spifs_avail_files:%d\n", availFiles);
+    uint32_t availSector= spifs_avail();
+    printf("> spifs_avail_sectors:%d\n", availSector);
+
+    uint8_t code = w25q32_output(OUTPUTPATH, "wb+", 0xD0000, 81920);
+    if(code) {
+        puts("> w25q32_output");
+    }
+
     w25q32_destory();
     puts("w25q32 destory");
 
@@ -41,7 +62,7 @@ static void test_create() {
     FileInfo finfo;
 
     Result result;
-    FileList *list;
+
     uint8_t *buffer = (uint8_t *)malloc(sizeof(uint8_t) * 16);
 
     make_finfo(&finfo, 2020, 9, 2, (FSTATE_DEFAULT));
@@ -72,20 +93,6 @@ static void test_create() {
             *(buffer + i) = i;
         }
         result = write_file(&file, buffer, 12, OVERRIDE);
-    }
-    // 文件列出
-    list = list_file();
-    disp_list(list);
-    recycle_filelist(list);
-    // 剩余空间
-    uint32_t availFiles = spifs_avail_files();
-    printf("> spifs_avail_files:%d\n", availFiles);
-    uint32_t availSector= spifs_avail();
-    printf("> spifs_avail_sectors:%d\n", availSector);
-
-    uint8_t code = w25q32_output(OUTPUTPATH, "wb+", 0, 0xD0000 + 81920);
-    if(code) {
-        puts("> w25q32_output");
     }
     free(buffer);
 }
@@ -124,6 +131,15 @@ static void read_test() {
         puts("> read test finish !");
     }else {
         puts("> open filed !");
+    }
+}
+
+static void rename_test() {
+    File file;
+    Result res;
+    if(open_file(&file, "tiimage", "c")) {
+        res = rename_file(&file, "hello", "java");
+        printf("rename file result:%d\n", res);
     }
 }
 
