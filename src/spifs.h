@@ -21,22 +21,30 @@
 #define MAJOR_VERSION    (0x2)
 #define MINOR_VERSION    (0x1)
 
-// 文件状态字 (1字节)
+// 文件状态字 (1字节) 权限描述: x表示禁止, o表示允许; 置为状态值:0, 默认状态值:1
 typedef struct _file_state {
     // delete 0:删除, 1:正常文件
+    // 置位权限: 读x 写x 重命名x 打开x
     uint8_t del : 1;
+
     // deprecate 0:失效文件, 1:正常文件
+    // 置位权限: 读x 写x 重命名x 打开x
     uint8_t dep : 1;
+
     // read & write 0:只读文件, 1:读写文件
+    // 置位权限: 读o 写x 重命名x 打开o
     uint8_t rw : 1;
+
     // system 0:系统文件, 1:普通文件
+    // 置位权限: 文件系统层不做限制, 等同普通文件
     uint8_t sys : 1;
+
     // 未使用状态字, 可根据需求自定义
     uint8_t reserve : 4;
 } FileState;
 
 /**
- * @brief FileState包装类，可以避免FileState到uint8_t的强制类型转换
+ * @brief FileState包装类，避免FileState到uint8_t的强制类型转换
  */
 typedef union _file_state_pack {
     uint8_t data;
@@ -60,7 +68,7 @@ typedef struct _file_block {
     FileInfo info;   // 文件信息
 } FileBlock;
 
-// 文件信息结构(24字节)
+// 文件信息结构(24字节),
 typedef struct _file {
     uint8_t filename[8];  // 文件名
     uint8_t extname[4];  // 拓展名
@@ -81,29 +89,34 @@ typedef struct file_list {
  */
 typedef enum _result {
     // 创建文件索引块成功
-    CREATE_FILEBLOCK_SUCCESS = 0,
+    CREATE_FILE_SUCCESS = 0,
+    // 文件索引区空间不足
+    NO_FILEBLOCK_SPACE,
+
+    // 文件已存在, 用于文件创建/重命名时名称冲突检查
+    FILE_ALREADY_EXIST,
+    // 文件不允许写入
+    CANNOT_WRITE_FILE,
+    // 空文件文件未分配
+    FILE_NOT_EXIST,
+
+    // 数据区空间不足
+    NO_SECTOR_SPACE,
+
     // 写文件成功
     WRITE_FILE_SUCCESS,
     // 追加写文件成功
     APPEND_FILE_SUCCESS,
     // 追加写结束
     APPEND_FILE_FINISH,
-    // 文件索引区空间不足
-    NO_FILEBLOCK_SPACE,
-    // 数据区空间不足
-    NO_SECTOR_SPACE,
-    // 文件未分配
-    FILE_UNALLOCATED,
-    // 文件不能被追加写，例如系统文件/只读文件/被删除的文件/过期的文件
-    FILE_CANNOT_APPEND,
-    // 空文件
-    FILE_NOT_EXIST,
-    // 文件不能被重命名，例如系统文件/只读文件/被删除的文件/过期的文件
+
+    // 文件不能被重命名
     FILE_CANNOT_RENAME,
     // 文件超出长度
-    FILENAME_INCORRECT,
+    FILENAME_OUT_OF_BOUNDS,
     // 文件重命名成功
     FILE_RENAME_SUCCESS
+
 } Result;
 
 /**

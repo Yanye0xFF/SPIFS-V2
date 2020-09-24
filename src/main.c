@@ -6,6 +6,9 @@
 
 #define OUTPUTPATH    ("G:\\ramdisk")
 
+#define LOCALIZATION
+#undef LOCALIZATION
+
 static void display_fname(File *file);
 void disp_list(FileList *list);
 
@@ -44,10 +47,12 @@ int main(int argc, char **argv) {
     uint32_t availSector= spifs_avail();
     printf("> spifs_avail_sectors:%d\n", availSector);
 
+    #ifdef LOCALIZATION
     uint8_t code = w25q32_output(OUTPUTPATH, "wb+", 0xD0000, 81920);
     if(code) {
         puts("> w25q32_output");
     }
+    #endif // LOCALIZATION
 
     w25q32_destory();
     puts("w25q32 destory");
@@ -70,12 +75,24 @@ static void test_create() {
 
     result = create_file(&file, &finfo);
 
-    if(result == CREATE_FILEBLOCK_SUCCESS) {
-        puts("> CREATE_FILEBLOCK_SUCCESS");
+    if(result == CREATE_FILE_SUCCESS) {
+        puts("> CREATE_FILE_SUCCESS");
         printf("> file.block:0x%x\n", file.block);
+
+        puts("align write test:");
         // 对齐追加写入测试
         memset(buffer, 0xAA, sizeof(uint8_t) * 12);
         result = write_file(&file, buffer, 12, APPEND);
+
+        if(result == WRITE_FILE_SUCCESS) {
+            puts("> WRITE_FILE_SUCCESS");
+        }else if(result == APPEND_FILE_SUCCESS) {
+            puts("> APPEND_FILE_SUCCESS");
+        }else {
+            printf("> write_file err:%d\n", result);
+        }
+
+        puts("not align write test:");
         // 非对齐追加写入测试
         memset(buffer, 0xBB, sizeof(uint8_t) * 12);
         result = write_file(&file, buffer, 3, APPEND);
