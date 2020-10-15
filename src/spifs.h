@@ -21,14 +21,24 @@
 #define MAJOR_VERSION    (0x2)
 #define MINOR_VERSION    (0x1)
 
+// 文件状态字值，与flash相关，flash擦除后全为1，因此默认无效状态为1
+typedef enum _filestatevalue {
+    // 文件状态字 置位值 表明该位有效
+    FILE_STATE_MARKED = 0,
+    // 文件状态字 默认值 表明该位无效
+    FILE_STATE_DEFAULT = 1
+} FileStateValue;
+
 // 文件状态字 (1字节) 权限描述: x表示禁止, o表示允许; 置为状态值:0, 默认状态值:1
 typedef struct _file_state {
     // delete 0:删除, 1:正常文件
     // 置位权限: 读x 写x 重命名x 打开x
+    // GC时将回收该文件占用区域
     uint8_t del : 1;
 
     // deprecate 0:失效文件, 1:正常文件
     // 置位权限: 读x 写x 重命名x 打开x
+    // GC时将回收该文件占用区域
     uint8_t dep : 1;
 
     // read & write 0:只读文件, 1:读写文件
@@ -185,6 +195,15 @@ typedef enum _write_method {
 #define FSTATE_READONLY       (0xFB)
 #define FSTATE_SYSTEM         (0xF7)
 #define FSTATE_DEFAULT        (0xFF)
+
+// 日期的限制参数
+#define YEAR_MINI_VALUE    2000
+#define YEAR_MAX_VALUE     2255
+#define MONTH_MINI_VALUE   1
+#define MONTH_MAX_VALUE    12
+#define DAY_MINI_VALUE     1
+#define DAY_MAX_VALUE      31
+
 
 #define os_memset    memset
 #define os_memcpy    memcpy

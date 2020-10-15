@@ -4,10 +4,10 @@
 #include "string.h"
 #include <time.h>
 
-#define OUTPUTPATH    ("G:\\ramdisk")
+#define OUTPUTPATH    ("I:\\ramdisk")
 
 #define LOCALIZATION
-#undef LOCALIZATION
+//#undef LOCALIZATION
 
 static void display_fname(File *file);
 void disp_list(FileList *list);
@@ -15,6 +15,7 @@ void disp_list(FileList *list);
 static void test_create();
 static void read_test();
 static void rename_test();
+static void append_exist_file_test();
 
 int main(int argc, char **argv) {
 
@@ -32,9 +33,11 @@ int main(int argc, char **argv) {
 
     test_create();
 
-    read_test();
+    append_exist_file_test();
 
-    rename_test();
+    //read_test();
+
+    //rename_test();
 
     // 文件列出
     list = list_file();
@@ -112,6 +115,27 @@ static void test_create() {
         result = write_file(&file, buffer, 12, OVERRIDE);
     }
     free(buffer);
+}
+
+static void append_exist_file_test() {
+    File file;
+    Result result;
+    uint8_t buffer[16];
+
+    memset(buffer, 0xCC, 16);
+
+    if(open_file(&file, "tiimage", "c")) {
+        printf("Open file success!\n");
+
+        result = write_file(&file, buffer, 16, APPEND);
+        printf("> write_file result:%d\n", result);
+
+        result = write_finish(&file);
+        printf("> write_finish result:%d\n", result);
+
+        return;
+    }
+    printf("Open file failed!\n");
 }
 
 static void read_test() {

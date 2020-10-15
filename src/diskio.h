@@ -13,13 +13,13 @@ typedef	enum {
 
 #define FLASH_ID    (0x1640ef)
 
-// 需要自行移植的部分
+//**********需要自行移植的部分***************
 uint32_t spi_flash_get_id(void);
 
 SpiFlashOpResult spi_flash_erase_sector(uint16_t sec);
 SpiFlashOpResult spi_flash_write(uint32_t des_addr, uint32_t *src_addr, uint32_t size);
 SpiFlashOpResult spi_flash_read(uint32_t src_addr, uint32_t *des_addr, uint32_t size);
-//
+//*************************
 
 
 void write_fileblock(uint32_t addr, FileBlock *fb);

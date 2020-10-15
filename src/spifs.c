@@ -24,11 +24,16 @@ BOOL make_finfo(FileInfo *finfo, uint32_t year, uint8_t month, uint8_t day, uint
     if(finfo == NULL) {
         return FALSE;
     }
+    if((year < YEAR_MINI_VALUE || year > YEAR_MAX_VALUE)
+        || (month < MONTH_MINI_VALUE || month > MONTH_MAX_VALUE)
+        || (day < DAY_MINI_VALUE || day > DAY_MAX_VALUE)) {
+    	return FALSE;
+    }
     fspack.data = fstate;
     finfo->state = fspack.fstate;
     finfo->day = day;
     finfo->month = month;
-    finfo->year = (year - 2000);
+    finfo->year = (year - YEAR_MINI_VALUE);
     return TRUE;
 }
 
@@ -274,9 +279,27 @@ Result write_file(File *file, uint8_t *buffer, uint32_t length, WriteMethod meth
  * @return Result
  * */
 Result write_finish(File *file) {
+    FileBlock fblock;
+    FileInfo finfo;
+    Result result;
     if(file == NULL || file->block == EMPTY_INT_VALUE) return FILE_NOT_EXIST;
-    write_fileblock_length(file->block, file->length);
-    return APPEND_FILE_FINISH;
+
+    // 读取原始文件索引块
+    spi_flash_read(file->block, (uint32_t *)&fblock, sizeof(fblock));
+
+    if(fblock.length == EMPTY_INT_VALUE) {
+        // 文件大小信息为空，直接写入文件大小信息
+        write_fileblock_length(file->block, file->length);
+        return APPEND_FILE_FINISH;
+    }
+    //读取文件属性
+    read_finfo(file, &finfo);
+    // 标记旧的文件索引块失效，但不执行擦除操作
+    write_fileblock_state(file->block, FSTATE_DEPRECATE);
+    // 重新创建文件索引块
+    result = create_file(file, &finfo);
+
+    return (result == CREATE_FILE_SUCCESS) ? APPEND_FILE_FINISH : result;
 }
 
 /**
@@ -401,7 +424,7 @@ static BOOL open_file_impl(File *file, uint8_t *filename, uint8_t *extname, BOOL
             fb = (FileBlock *)slot_buffer;
 
             // 忽略标记删除/废弃的文件
-            if(fb->info.state.del == 0 || fb->info.state.dep == 0) {
+            if(fb->info.state.del == FILE_STATE_MARKED || fb->info.state.dep == FILE_STATE_MARKED) {
                 addr_start += FILEBLOCK_SIZE;
                 continue;
             }
@@ -587,7 +610,7 @@ void spifs_gc() {
             }
             fb = (FileBlock *)slot_buffer;
             // 文件被标识为删除
-            if((fb->info.state.del) == 0) {
+            if((fb->info.state.del) == FILE_STATE_MARKED) {
                 // 根据链表擦除文件占用扇区
                 while(fb->cluster != EMPTY_INT_VALUE) {
                     spi_flash_read((fb->cluster + DATA_AREA_SIZE + SECTOR_MARK_SIZE), &addr_cluster, sizeof(uint32_t));
@@ -599,7 +622,7 @@ void spifs_gc() {
                 rewrite = TRUE;
             }
             // 文件被标记为失效
-            if((fb->info.state.dep) == 0) {
+            if((fb->info.state.dep) == FILE_STATE_MARKED) {
                 // 清除文件索引信息
                 clear_fileblock(sector_buffer, offset);
                 rewrite = TRUE;
