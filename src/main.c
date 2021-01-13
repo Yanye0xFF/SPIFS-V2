@@ -4,14 +4,15 @@
 #include "string.h"
 #include <time.h>
 
-#define OUTPUTPATH    ("I:\\ramdisk")
+#define OUTPUTPATH    ("G:\\ramdisk")
 
 #define LOCALIZATION
 //#undef LOCALIZATION
 
 static void display_fname(File *file);
-void disp_list(FileList *list);
+static void disp_list(FileList *list);
 
+static void load_into(char *fullname, char *filename, char *extname);
 static void test_create();
 static void read_test();
 static void rename_test();
@@ -31,9 +32,12 @@ int main(int argc, char **argv) {
     spifs_format();
     printf("spifs format\n");
 
+//    load_into("G:\\font\\GB2312.bin", "GB2312", "bin");
+
+
     test_create();
 
-    append_exist_file_test();
+    //append_exist_file_test();
 
     //read_test();
 
@@ -50,8 +54,10 @@ int main(int argc, char **argv) {
     uint32_t availSector= spifs_avail();
     printf("> spifs_avail_sectors:%d\n", availSector);
 
+    printf("sizeof size_t:%d\n", sizeof(size_t));
+
     #ifdef LOCALIZATION
-    uint8_t code = w25q32_output(OUTPUTPATH, "wb+", 0xD0000, 81920);
+    uint8_t code = w25q32_output(OUTPUTPATH, "wb+", 0xD0000, 1572864);
     if(code) {
         puts("> w25q32_output");
     }
@@ -61,6 +67,57 @@ int main(int argc, char **argv) {
     puts("w25q32 destory");
 
     return 0;
+}
+
+static void load_into(char *fullname, char *filename, char *extname) {
+    // stdio
+    uint32_t fsize;
+    FILE *raw = fopen(fullname, "rb");
+    // spifs
+    const uint32_t year = 2020;
+    const uint8_t month = 11, day = 4, fstate = FSTATE_SYSTEM;
+    const uint32_t limit = 4088;
+    uint32_t loadsize, part = 0;
+    File file;
+    FileInfo finfo;
+    Result result;
+    uint8_t *buffer;
+
+    if(raw == NULL) {
+        printf("open %s fail, interrupted !\n", fullname);
+        return;
+    }
+
+    fseek(raw, 0, SEEK_END);
+    fsize = ftell(raw);
+
+    fseek(raw, 0, SEEK_SET);
+    buffer = (uint8_t *)malloc(sizeof(uint8_t) * limit);
+
+    // create new file
+    make_finfo(&finfo, year, month, day, fstate);
+    make_file(&file, filename, extname);
+    result = create_file(&file, &finfo);
+    printf("create %s.%s result:%d\n", filename, extname, result);
+
+    if(result != CREATE_FILE_SUCCESS) {
+    printf("create %s.%s fail, interrupted !\n", filename, extname);
+        return;
+    }
+
+    while(fsize > 0) {
+        loadsize = (fsize > limit) ? limit : fsize;
+        fread(buffer, 1, loadsize, raw);
+        result = write_file(&file, buffer, loadsize, APPEND);
+        printf("part:%d, write_file result:%d\n", part, result);
+        fsize -= loadsize;
+        part++;
+    }
+    result = write_finish(&file);
+    printf("write_finish result:%d\n", result);
+
+    fclose(raw);
+    free(buffer);
 }
 
 // test functions
@@ -73,9 +130,10 @@ static void test_create() {
 
     uint8_t *buffer = (uint8_t *)malloc(sizeof(uint8_t) * 16);
 
+    printf("buffer address:0x%x\n", (size_t)buffer);
+
     make_finfo(&finfo, 2020, 9, 2, (FSTATE_DEFAULT));
     make_file(&file, "tiimage", "c");
-
     result = create_file(&file, &finfo);
 
     if(result == CREATE_FILE_SUCCESS) {
@@ -95,7 +153,7 @@ static void test_create() {
             printf("> write_file err:%d\n", result);
         }
 
-        puts("not align write test:");
+        puts("not align write test1:");
         // 非对齐追加写入测试
         memset(buffer, 0xBB, sizeof(uint8_t) * 12);
         result = write_file(&file, buffer, 3, APPEND);
@@ -107,6 +165,33 @@ static void test_create() {
         }else {
             printf("> write_file err:%d\n", result);
         }
+
+        puts("not align write test2:");
+        // 非对齐追加写入测试
+        memset(buffer, 0xCC, sizeof(uint8_t) * 12);
+        result = write_file(&file, buffer + 3, 4, APPEND);
+
+        if(result == WRITE_FILE_SUCCESS) {
+            puts("> WRITE_FILE_SUCCESS");
+        }else if(result == APPEND_FILE_SUCCESS) {
+            puts("> APPEND_FILE_SUCCESS");
+        }else {
+            printf("> write_file err:%d\n", result);
+        }
+
+        puts("not align write test3:");
+        // 非对齐追加写入测试
+        memset(buffer, 0xDD, sizeof(uint8_t) * 12);
+        result = write_file(&file, buffer + 3, 3, APPEND);
+
+        if(result == WRITE_FILE_SUCCESS) {
+            puts("> WRITE_FILE_SUCCESS");
+        }else if(result == APPEND_FILE_SUCCESS) {
+            puts("> APPEND_FILE_SUCCESS");
+        }else {
+            printf("> write_file err:%d\n", result);
+        }
+
         write_finish(&file);
         // 覆盖写测试
         for(uint32_t i = 0; i < 12; i++) {
@@ -122,12 +207,12 @@ static void append_exist_file_test() {
     Result result;
     uint8_t buffer[16];
 
-    memset(buffer, 0xCC, 16);
+    memset(buffer, 0xCC, 15);
 
     if(open_file(&file, "tiimage", "c")) {
         printf("Open file success!\n");
 
-        result = write_file(&file, buffer, 16, APPEND);
+        result = write_file(&file, buffer, 15, APPEND);
         printf("> write_file result:%d\n", result);
 
         result = write_finish(&file);
@@ -144,7 +229,11 @@ static void read_test() {
     File file;
     // 打开文件测试
     if(open_file(&file, "tiimage", "c")) {
+
+        printf("open_file success\n");
+
         memset(buffer, 0x00, 16);
+
         // 偏移/长度对齐读
         result = read_file(&file, 0, buffer, 8);
         printf("> read file result:%d\n", result);
@@ -152,6 +241,7 @@ static void read_test() {
             printf("0x%x ", buffer[i]);
         }
         printf("\n");
+
         // 偏移不对齐，长度对齐
         memset(buffer, 0x00, 16);
         result = read_file(&file, 3, buffer, 8);
@@ -197,7 +287,7 @@ static void display_fname(File *file) {
     }
 }
 
-void disp_list(FileList *list) {
+static void disp_list(FileList *list) {
     FileList *ptr = NULL;
     FileInfo finfo;
     FileStatePack fspack;

@@ -1,28 +1,21 @@
+/*
+ * spifs.h
+ * @brief SPIFS文件系统
+ * Created on: Sep 5, 2020
+ * Author: Yanye
+ */
+
 #ifndef _FILESYS_H_
 #define _FILESYS_H_
 
-#include <stdint.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include "string.h"
-
-#ifndef BOOL
-#define BOOL unsigned char
-#endif
-
-#ifndef TRUE
-#define TRUE ((unsigned char)1)
-#endif
-
-#ifndef FALSE
-#define FALSE ((unsigned char)0)
-#endif
+#include "stdint.h"
+#include "fslib.h"
 
 #define MAJOR_VERSION    (0x2)
 #define MINOR_VERSION    (0x1)
 
 // 文件状态字值，与flash相关，flash擦除后全为1，因此默认无效状态为1
-typedef enum _filestatevalue {
+typedef enum _file_state_value {
     // 文件状态字 置位值 表明该位有效
     FILE_STATE_MARKED = 0,
     // 文件状态字 默认值 表明该位无效
@@ -49,12 +42,12 @@ typedef struct _file_state {
     // 置位权限: 文件系统层不做限制, 等同普通文件
     uint8_t sys : 1;
 
-    // 未使用状态字, 可根据需求自定义
+    // 未使用状态字
     uint8_t reserve : 4;
 } FileState;
 
 /**
- * @brief FileState包装类，避免FileState到uint8_t的强制类型转换
+ * @brief FileState包装类，可以避免FileState到uint8_t的强制类型转换
  */
 typedef union _file_state_pack {
     uint8_t data;
@@ -78,17 +71,17 @@ typedef struct _file_block {
     FileInfo info;   // 文件信息
 } FileBlock;
 
-// 文件信息结构(24字节),
+// 文件信息结构(24字节)
 typedef struct _file {
-    uint8_t filename[8];  // 文件名
-    uint8_t extname[4];  // 拓展名
-    uint32_t block;     // 文件索引记录地址
-    uint32_t cluster;  // 文件内容起始扇区地址
-    uint32_t length;  // 文件大小
+    uint8_t filename[8]; // 文件名
+    uint8_t extname[4]; // 拓展名
+    uint32_t block;    // 文件索引记录地址
+    uint32_t cluster; // 文件内容起始扇区地址，首簇号
+    uint32_t length; // 文件大小
 } File;
 
 // 文件信息链表
-// 32bytes(64bit), 28bytes(32bit)
+// 32bytes(64bit platform), 28bytes(32bit platform)
 typedef struct file_list {
     File file;
     struct file_list *prev;
@@ -126,7 +119,6 @@ typedef enum _result {
     FILENAME_OUT_OF_BOUNDS,
     // 文件重命名成功
     FILE_RENAME_SUCCESS
-
 } Result;
 
 /**
@@ -174,9 +166,9 @@ typedef enum _write_method {
 // 扇区使用中标记大小(字节)
 #define SECTOR_MARK_SIZE       4
 // 扇区使用中标记
-#define SECTOR_INUSE_FLAG        (0xFF00FF00)
+#define SECTOR_INUSE_FLAG      (0xFF00FF00)
 // 扇区数据废弃标记
-#define SECTOR_DISCARD_FLAG      (0xFF00CC00)
+#define SECTOR_DISCARD_FLAG    (0xFF00CC00)
 // 空数据值, 适配flash擦除后全为1
 #define EMPTY_INT_VALUE          (0xFFFFFFFF)
 #define EMPTY_BYTE_VALUE         (0xFF)
@@ -204,13 +196,6 @@ typedef enum _write_method {
 #define DAY_MINI_VALUE     1
 #define DAY_MAX_VALUE      31
 
-
-#define os_memset    memset
-#define os_memcpy    memcpy
-#define os_strlen    strlen
-#define os_malloc    malloc
-#define os_free      free
-
 BOOL make_file(File *file, char *filename, char *extname);
 
 BOOL make_finfo(FileInfo *finfo, uint32_t year, uint8_t month, uint8_t day, uint8_t fstate);
@@ -225,11 +210,13 @@ BOOL read_file(File *file, uint32_t offset, uint8_t *buffer, uint32_t size);
 
 BOOL open_file(File *file, char *filename, char *extname);
 
+BOOL open_file_raw(File *file, uint8_t *filename, uint8_t *extname);
+
 Result rename_file(File *file, char *filename, char *extname);
 
 void delete_file(File *file);
 
-FileList *list_file();
+FileList * list_file();
 
 void recycle_filelist(FileList *list);
 
