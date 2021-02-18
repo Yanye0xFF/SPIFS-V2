@@ -6,7 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define W25Q32_SIZE 4194304
+// 1MB
+#define W25Q32_SIZE 1048576
 
 void w25q32_allocate();
 void w25q32_destory();

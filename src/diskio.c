@@ -1,15 +1,65 @@
 #include "diskio.h"
 
-void spi_flash_write(uint32_t addr, uint32_t *data, uint32_t size) {
-    w25q32_write_align(addr, data, size);
+/**
+ * @brief 读取flashId
+ * @return FLASH_ID
+ */
+uint32_t spi_flash_get_id(void) {
+    JedecId jedecid;
+    uint32_t flashid;
+
+    jedecid = w25qxx_read_jedec_id();
+    memcpy(&flashid, &jedecid, sizeof(uint32_t));
+
+    return flashid;
 }
 
-void spi_flash_read(uint32_t addr, uint32_t *buffer, uint32_t size) {
-    w25q32_read_align(addr, buffer, size);
+/**
+ * @brief falsh扇区擦除
+ * @param sec 扇区号,从扇区0开始计数,每扇区4KB
+ * @return SpiFlashOpResult
+ */
+SpiFlashOpResult spi_flash_erase_sector(uint16_t sec) {
+    SpiFlashOpResult result;
+    result = w25qxx_write_enable();
+    if(result == SPI_FLASH_RESULT_OK) {
+        return w25qxx_erase_sector(sec * 0x1000);
+    }
+    return result;
 }
 
-void spi_flash_erase_sector(uint32_t secIndex) {
-    w25q32_sector_erase(secIndex * 0x1000);
+/**
+ * @brief 4字节对齐写flash
+ * @param des_addr 写入flash目的地址，任意地址
+ * @param *src_addr 写入数据指针，四字节边界
+ * @param size 数据长度,单位byte,四字节对齐
+ * @return SpiFlashOpResult
+ */
+SpiFlashOpResult spi_flash_write(uint32_t des_addr, uint32_t *src_addr, uint32_t size) {
+    SpiFlashOpResult result;
+    uint8_t *ptr = (uint8_t *)src_addr;
+    result = w25qxx_write_enable();
+    if(result == SPI_FLASH_RESULT_OK) {
+        return w25qxx_write(des_addr, ptr, size);
+    }
+    return result;
+}
+
+/**
+ * @brief 4字节对齐写flash
+ * @param src_addr 读取flash目的地址
+ * @param *des_addr 存放数据指针
+ * @param size 数据长度,单位byte,需要四字节对齐
+ * @return SpiFlashOpResult
+ */
+SpiFlashOpResult spi_flash_read(uint32_t src_addr, uint32_t *des_addr, uint32_t size) {
+    SpiFlashOpResult result;
+    uint8_t *ptr = (uint8_t *)des_addr;
+    result = w25qxx_write_enable();
+    if(result == SPI_FLASH_RESULT_OK) {
+        return w25qxx_fast_read(src_addr, ptr, size);
+    }
+    return result;
 }
 
 /**
@@ -29,11 +79,11 @@ void write_fileblock(uint32_t addr, FileBlock *fb) {
  * @param offset 偏移量
  * */
 void clear_fileblock(uint8_t *baseAddr, uint32_t offset) {
-    os_memset((baseAddr + offset), 0xFF, FILEBLOCK_SIZE);
+    memset((baseAddr + offset), 0xFF, FILEBLOCK_SIZE);
 }
 
 /**
- * 写入扇区状态字, secAddr为扇区首地址
+ * 写入扇区状态字, secAddr一般为扇区首地址
  * @param secAddr 写入扇区首地址
  * @param mark 标记符
  * */
@@ -47,8 +97,7 @@ void update_sector_mark(uint32_t secAddr, uint32_t mark) {
  * @param cluster 首簇地址
  * */
 void write_fileblock_cluster(uint32_t fbaddr, uint32_t cluster) {
-    // 偏移FILENAME_FULLSIZE长度
-	spi_flash_write((fbaddr + FILENAME_FULLSIZE), &cluster, sizeof(uint32_t));
+	spi_flash_write(fbaddr + 12, &cluster, sizeof(uint32_t));
 }
 
 /**
@@ -57,8 +106,7 @@ void write_fileblock_cluster(uint32_t fbaddr, uint32_t cluster) {
  * @param length 文件长度
  * */
 void write_fileblock_length(uint32_t fbaddr, uint32_t length) {
-    // 偏移FILENAME_FULLSIZE + cluster(4bytes)长度
-	spi_flash_write((fbaddr + 16), &length, sizeof(uint32_t));
+	spi_flash_write(fbaddr + 16, &length, sizeof(uint32_t));
 }
 
 /**
@@ -69,11 +117,10 @@ void write_fileblock_length(uint32_t fbaddr, uint32_t length) {
 void write_fileblock_state(uint32_t fbaddr, uint8_t fstate) {
     FileInfo finfo;
     FileStatePack fspack;
-    // 偏移FILENAME_FULLSIZE + cluster(4bytes) + length(4bytes)长度
-    spi_flash_read((fbaddr + 20), (uint32_t *)&finfo, sizeof(uint32_t));
+    spi_flash_read(fbaddr + 20, (uint32_t *)&finfo, sizeof(uint32_t));
     fspack.fstate = finfo.state;
     // 由于flash仅能由1->0因此这里使用&操作
     fspack.data &= fstate;
     finfo.state = fspack.fstate;
-    spi_flash_write((fbaddr + 20), (uint32_t *)&finfo, sizeof(uint32_t));
+    spi_flash_write(fbaddr + 20, (uint32_t *)&finfo, sizeof(uint32_t));
 }

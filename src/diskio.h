@@ -2,13 +2,17 @@
 #define __DISKIO_H__
 
 #include "stdint.h"
+#include "string.h"
 #include "spifs.h"
-#include "w25q32.h"
-#include "fslib.h"
+#include "w25qxx.h"
 
-void spi_flash_write(uint32_t addr, uint32_t *data, uint32_t size);
-void spi_flash_read(uint32_t addr, uint32_t *buffer, uint32_t size);
-void spi_flash_erase_sector(uint32_t secIndex);
+
+//**********需要自行移植的部分***************
+uint32_t spi_flash_get_id(void);
+SpiFlashOpResult spi_flash_erase_sector(uint16_t sec);
+SpiFlashOpResult spi_flash_write(uint32_t des_addr, uint32_t *src_addr, uint32_t size);
+SpiFlashOpResult spi_flash_read(uint32_t src_addr, uint32_t *des_addr, uint32_t size);
+//*************************
 
 void write_fileblock(uint32_t addr, FileBlock *fb);
 void clear_fileblock(uint8_t *baseAddr, uint32_t offset);
