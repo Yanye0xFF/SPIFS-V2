@@ -6,7 +6,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define W25Q32_SIZE 4194304
+// 1MB
+#define W25Q32_SIZE        1048576
+#define W25Q32_FLASH_ID    0x401615
+
+typedef enum {
+    SPI_FLASH_RESULT_OK,
+    SPI_FLASH_RESULT_ERR,
+    SPI_FLASH_RESULT_TIMEOUT
+} SpiFlashOpResult;
 
 void w25q32_allocate();
 void w25q32_destory();

@@ -114,3 +114,42 @@
 1599007083 source:e:\cppworkspace\w25q32emuex\w25q32.c
 	"w25q32.h"
 
+1613680564 source:e:\cppworkspace\spifs-v2\w25q32.c
+	"w25q32.h"
+
+1613874677 e:\cppworkspace\spifs-v2\w25q32.h
+	<stdio.h>
+	<stdint.h>
+	<stdlib.h>
+	<string.h>
+
+1613879032 source:e:\cppworkspace\spifs-v2\spifs.c
+	"spifs.h"
+
+1613876605 e:\cppworkspace\spifs-v2\spifs.h
+	"string.h"
+	"stdlib.h"
+	"stdint.h"
+	"ctypes.h"
+	"diskio.h"
+
+1608894613 e:\cppworkspace\spifs-v2\ctypes.h
+	<stdint.h>
+
+1613874272 e:\cppworkspace\spifs-v2\diskio.h
+	"stdint.h"
+	"string.h"
+	"spifs.h"
+	"w25q32.h"
+
+1613874848 source:e:\cppworkspace\spifs-v2\diskio.c
+	"diskio.h"
+
+1613881074 source:e:\cppworkspace\spifs-v2\main.c
+	<stdio.h>
+	"spifs.h"
+	"w25q32.h"
+	"string.h"
+	<time.h>
+	"ctypes.h"
+

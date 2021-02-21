@@ -3,14 +3,16 @@
 #include "w25q32.h"
 #include "string.h"
 #include <time.h>
+#include "ctypes.h"
 
 #define OUTPUTPATH    ("G:\\ramdisk")
 
 #define LOCALIZATION
 //#undef LOCALIZATION
 
+
 static void display_fname(File *file);
-static void disp_list(FileList *list);
+void disp_list(File *file, uint32_t total);
 
 static void load_into(char *fullname, char *filename, char *extname);
 static void test_create();
@@ -18,9 +20,14 @@ static void read_test();
 static void rename_test();
 static void append_exist_file_test();
 
+static uint8_t byteStrTohex(uint8_t *str);
+
+static Short queryGB2312ByUnicode(Short unicode);
+
+uint8_t *unicodeTogb2312(uint8_t *unicode);
+
 int main(int argc, char **argv) {
 
-    FileList *list;
     uint16_t spifs_version;
 
     w25q32_allocate();
@@ -32,8 +39,18 @@ int main(int argc, char **argv) {
     spifs_format();
     printf("spifs format\n");
 
-//    load_into("G:\\font\\GB2312.bin", "GB2312", "bin");
+    printf("platform:%d\n", sizeof(size_t));
 
+    /*
+    load_into("G:\\font\\GB2312.bin", "GB2312", "bin");
+    load_into("G:\\font\\AS06_12.bin", "AS06_12", "bin");
+    load_into("G:\\font\\AS08_16.bin", "AS08_16", "bin");
+    load_into("G:\\font\\GB64SP.bin", "GB64SP", "bin");
+
+    load_into("I:\\fontmap\\utf16.lut", "utf16", "lut");
+
+    load_into("G:\\fontmap\\gb2312.lut", "gb2312", "lut");
+    */
 
     test_create();
 
@@ -43,24 +60,27 @@ int main(int argc, char **argv) {
 
     //rename_test();
 
+    File filse[8];
+    uint32_t next = 0, find = 0;
+
     // 文件列出
-    list = list_file();
-    disp_list(list);
-    recycle_filelist(list);
+    find = list_file(filse, 8, &next);
+    printf("list_file: %d\n", find);
+
+    disp_list(filse, find);
 
     // 剩余空间
     uint32_t availFiles = spifs_avail_files();
     printf("> spifs_avail_files:%d\n", availFiles);
-    uint32_t availSector= spifs_avail();
+
+    uint32_t availSector= spifs_avail_sector();
     printf("> spifs_avail_sectors:%d\n", availSector);
 
-    printf("sizeof size_t:%d\n", sizeof(size_t));
-
     #ifdef LOCALIZATION
-    uint8_t code = w25q32_output(OUTPUTPATH, "wb+", 0xD0000, 1572864);
-    if(code) {
-        puts("> w25q32_output");
-    }
+        uint8_t code = w25q32_output(OUTPUTPATH, "wb+", 0x0, 49152);
+        if(code) {
+            puts("> w25q32_output");
+        }
     #endif // LOCALIZATION
 
     w25q32_destory();
@@ -125,26 +145,22 @@ static void load_into(char *fullname, char *filename, char *extname) {
 static void test_create() {
     File file;
     FileInfo finfo;
-
     Result result;
-
-    uint8_t *buffer = (uint8_t *)malloc(sizeof(uint8_t) * 16);
-
-    printf("buffer address:0x%x\n", (size_t)buffer);
+    uint8_t buffer[16];
 
     make_finfo(&finfo, 2020, 9, 2, (FSTATE_DEFAULT));
     make_file(&file, "tiimage", "c");
+
     result = create_file(&file, &finfo);
 
     if(result == CREATE_FILE_SUCCESS) {
         puts("> CREATE_FILE_SUCCESS");
         printf("> file.block:0x%x\n", file.block);
 
-        puts("align write test:");
+        puts("address & length align write test:");
         // 对齐追加写入测试
-        memset(buffer, 0xAA, sizeof(uint8_t) * 12);
+        memset(buffer, 0xAA, sizeof(uint8_t) * 16);
         result = write_file(&file, buffer, 12, APPEND);
-
         if(result == WRITE_FILE_SUCCESS) {
             puts("> WRITE_FILE_SUCCESS");
         }else if(result == APPEND_FILE_SUCCESS) {
@@ -153,7 +169,7 @@ static void test_create() {
             printf("> write_file err:%d\n", result);
         }
 
-        puts("not align write test1:");
+        puts("length not align write test:");
         // 非对齐追加写入测试
         memset(buffer, 0xBB, sizeof(uint8_t) * 12);
         result = write_file(&file, buffer, 3, APPEND);
@@ -166,11 +182,10 @@ static void test_create() {
             printf("> write_file err:%d\n", result);
         }
 
-        puts("not align write test2:");
-        // 非对齐追加写入测试
-        memset(buffer, 0xCC, sizeof(uint8_t) * 12);
-        result = write_file(&file, buffer + 3, 4, APPEND);
-
+        puts("address not align write test:");
+        // 对齐追加写入测试
+        memset(buffer, 0xCC, sizeof(uint8_t) * 16);
+        result = write_file(&file, buffer + 1, 8, APPEND);
         if(result == WRITE_FILE_SUCCESS) {
             puts("> WRITE_FILE_SUCCESS");
         }else if(result == APPEND_FILE_SUCCESS) {
@@ -179,11 +194,10 @@ static void test_create() {
             printf("> write_file err:%d\n", result);
         }
 
-        puts("not align write test3:");
-        // 非对齐追加写入测试
-        memset(buffer, 0xDD, sizeof(uint8_t) * 12);
-        result = write_file(&file, buffer + 3, 3, APPEND);
-
+        puts("address & length not align write test:");
+        // 对齐追加写入测试
+        memset(buffer, 0xDD, sizeof(uint8_t) * 16);
+        result = write_file(&file, buffer + 2, 1, APPEND);
         if(result == WRITE_FILE_SUCCESS) {
             puts("> WRITE_FILE_SUCCESS");
         }else if(result == APPEND_FILE_SUCCESS) {
@@ -194,12 +208,14 @@ static void test_create() {
 
         write_finish(&file);
         // 覆盖写测试
+        /*
         for(uint32_t i = 0; i < 12; i++) {
             *(buffer + i) = i;
         }
         result = write_file(&file, buffer, 12, OVERRIDE);
+        */
     }
-    free(buffer);
+
 }
 
 static void append_exist_file_test() {
@@ -287,25 +303,20 @@ static void display_fname(File *file) {
     }
 }
 
-static void disp_list(FileList *list) {
-    FileList *ptr = NULL;
+void disp_list(File *files, uint32_t total) {
     FileInfo finfo;
     FileStatePack fspack;
     puts("--------filelist--------");
-    while(list != NULL) {
-        ptr = list->prev;
-        printf("filename:");
-        display_fname(&list->file);
-        putchar('\n');
 
-        read_finfo(&(list->file), &finfo);
+    for(int i = 0; i < total; i++) {
+        printf("filename:"); display_fname((files + i)); putchar('\n');
+
+        read_finfo((files + i), &finfo);
         printf("create_time: %d-%d-%d\n", (finfo.year+2000), finfo.month, finfo.day);
         fspack.fstate = finfo.state;
-
         printf("file_state: 0x%x\n", fspack.data);
+
         printf("block_addr: 0x%x,cluster_addr: 0x%x,length: 0x%x\n",
-               list->file.block, list->file.cluster, list->file.length);
-        list = ptr;
+               (files + i)->block, (files + i)->cluster, (files + i)->length);
     }
 }
-

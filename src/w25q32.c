@@ -5,7 +5,6 @@ static uint8_t erase_impl(uint32_t address, uint32_t erase_size);
 
 void w25q32_allocate() {
     if(w25q32_buffer == NULL) {
-        // 4MegaBytes
         w25q32_buffer = (uint8_t *)malloc(sizeof(uint8_t) * W25Q32_SIZE);
     }
 }
@@ -79,8 +78,8 @@ static uint8_t erase_impl(uint32_t address, uint32_t size) {
 }
 /**
  * @brief 四字节对齐读flash
- * @param src_addr flash地址, 四字节边界对齐
- * @param *des_addr 读出数据缓冲区, 四字节边界对齐, 在ARM中不可使用非对齐指针强制转换
+ * @param src_addr flash地址, 四字节边界
+ * @param *des_addr 读出数据缓冲区
  * @param size 读取长度, 单位byte, 需要四字节对齐
  */
 void w25q32_read_align(uint32_t src_addr, uint32_t *des_addr, uint32_t size) {
@@ -89,8 +88,8 @@ void w25q32_read_align(uint32_t src_addr, uint32_t *des_addr, uint32_t size) {
 
 /**
  * @brief 四字节对齐写flash
- * @param des_addr flash地址, 四字节边界对齐
- * @param *src_addr 写到flash数据源, 四字节边界对齐, 在ARM中不可使用非对齐指针强制转换
+ * @param des_addr flash地址, 四字节边界
+ * @param *src_addr 写到flash数据源
  * @param size 写长度, 单位byte, 需要四字节对齐
  */
 void w25q32_write_align(uint32_t des_addr, uint32_t *src_addr, uint32_t size) {

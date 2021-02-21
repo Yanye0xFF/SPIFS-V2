@@ -8,14 +8,21 @@
 #ifndef _FILESYS_H_
 #define _FILESYS_H_
 
+#include "string.h"
+#include "stdlib.h"
 #include "stdint.h"
-#include "fslib.h"
+#include "ctypes.h"
+
+#define os_memcpy    memcpy
+#define os_memset    memset
+
+
 
 #define MAJOR_VERSION    (0x2)
 #define MINOR_VERSION    (0x1)
 
 // 文件状态字值，与flash相关，flash擦除后全为1，因此默认无效状态为1
-typedef enum _file_state_value {
+typedef enum _filestatevalue {
     // 文件状态字 置位值 表明该位有效
     FILE_STATE_MARKED = 0,
     // 文件状态字 默认值 表明该位无效
@@ -42,7 +49,7 @@ typedef struct _file_state {
     // 置位权限: 文件系统层不做限制, 等同普通文件
     uint8_t sys : 1;
 
-    // 未使用状态字
+    // 未使用状态字, 可根据需求自定义
     uint8_t reserve : 4;
 } FileState;
 
@@ -79,13 +86,6 @@ typedef struct _file {
     uint32_t cluster; // 文件内容起始扇区地址，首簇号
     uint32_t length; // 文件大小
 } File;
-
-// 文件信息链表
-// 32bytes(64bit platform), 28bytes(32bit platform)
-typedef struct file_list {
-    File file;
-    struct file_list *prev;
-} FileList;
 
 /**
  * @brief 文件操作结果码
@@ -145,16 +145,19 @@ typedef enum _write_method {
 
 /**
  * 文件簇大小 = 扇区大小 = 4KB
- * 文件簇: 扇区标记字4字节, 数据区4088字节, 最后4字节为下一簇物理地址, FFFFFFFF表示文件结束
+ * 文件簇: 扇区头部标记字4字节, 数据区4088字节, 最后4字节为下一簇物理地址, FFFFFFFF表示文件结束
  * */
 
+// 使用空指针检查
+#define SPIFS_USE_NULL_CHECK
+
 // 文件索引占用扇区号范围[FB_SECTOR_START ~ FB_SECTOR_END]
-#define FB_SECTOR_START     208
-#define FB_SECTOR_END       211
+#define FB_SECTOR_START     0
+#define FB_SECTOR_END       3
 
 // 文件数据区占用扇区号范围[DATA_SECTOR_START ~ DATA_SECTOR_END]
-#define DATA_SECTOR_START   212
-#define DATA_SECTOR_END     1018
+#define DATA_SECTOR_START   4
+#define DATA_SECTOR_END     255
 
 // 文件索引占用空间大小(字节)
 #define FILEBLOCK_SIZE         24
@@ -166,9 +169,9 @@ typedef enum _write_method {
 // 扇区使用中标记大小(字节)
 #define SECTOR_MARK_SIZE       4
 // 扇区使用中标记
-#define SECTOR_INUSE_FLAG      (0xFF00FF00)
+#define SECTOR_INUSE_FLAG      (0xFFFFFFF0)
 // 扇区数据废弃标记
-#define SECTOR_DISCARD_FLAG    (0xFF00CC00)
+#define SECTOR_DISCARD_FLAG    (0xFFFFFF00)
 // 空数据值, 适配flash擦除后全为1
 #define EMPTY_INT_VALUE          (0xFFFFFFFF)
 #define EMPTY_BYTE_VALUE         (0xFF)
@@ -216,20 +219,18 @@ Result rename_file(File *file, char *filename, char *extname);
 
 void delete_file(File *file);
 
-FileList * list_file();
-
-void recycle_filelist(FileList *list);
+uint32_t list_file(File *files, uint32_t max, uint32_t *nextAddress);
 
 BOOL read_finfo(File *file, FileInfo *finfo);
 
-void spifs_gc();
+void spifs_gc(void);
 
-void spifs_format();
+void spifs_format(void);
 
-uint32_t spifs_avail();
+uint32_t spifs_avail_sector(void);
 
-uint32_t spifs_avail_files();
+uint32_t spifs_avail_files(void);
 
-uint16_t spifs_get_version();
+uint16_t spifs_get_version(void);
 
 #endif
