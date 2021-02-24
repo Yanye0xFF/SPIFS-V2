@@ -348,9 +348,9 @@ Result write_finish(File *file) {
  * @param offset 文件偏移量, 以0为基准
  * @param *buffer 存储数据缓冲区，需要4字节对齐
  * @param length 读出字节数
- * @return FALSE:失败 TRUE:成功
+ * @return length 实际读取的大小(bytes),正确返回时该值大于0
  * */
-BOOL read_file(File *file, uint32_t offset, uint8_t *buffer, uint32_t length) {
+uint32_t ICACHE_FLASH_ATTR read_file(File *file, uint32_t offset, uint8_t *buffer, uint32_t length) {
     FileInfo finfo;
     uint32_t addr_start = file->cluster, cursor = 0;
     uint32_t sectors = (offset / DATA_AREA_SIZE);
@@ -359,21 +359,21 @@ BOOL read_file(File *file, uint32_t offset, uint8_t *buffer, uint32_t length) {
     // 空指针检查
     if(file == NULL || file->block == EMPTY_INT_VALUE
 			|| file->cluster == EMPTY_INT_VALUE || file->length == EMPTY_INT_VALUE) {
-        return FALSE;
+        return 0;
     }
 #endif
     read_finfo(file, &finfo);
     // 权限检查
     if(!(finfo.state.del & finfo.state.dep)) {
-        return FALSE;
+        return 0;
     }
     // 边界检查
     if(offset >= file->length) {
-        return FALSE;
+        return 0;
     }
 
     if((file->length - offset) < length) {
-    	length = file->length - offset;
+    	length = (file->length - offset);
     }
 
     // 跳过偏移扇区
@@ -382,6 +382,7 @@ BOOL read_file(File *file, uint32_t offset, uint8_t *buffer, uint32_t length) {
         addr_start = temp;
         offset -= DATA_AREA_SIZE;
     }
+    i = length;
     // 移至当前扇区偏移地址
     addr_start += (SECTOR_MARK_SIZE + offset);
     read_size = (DATA_AREA_SIZE - offset);
@@ -402,7 +403,7 @@ BOOL read_file(File *file, uint32_t offset, uint8_t *buffer, uint32_t length) {
     		length -= read_size;
     	}
     }
-    return TRUE;
+    return i;
 }
 
 /**

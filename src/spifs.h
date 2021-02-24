@@ -209,7 +209,7 @@ Result write_file(File *file, uint8_t *buffer, uint32_t size, WriteMethod method
 
 Result write_finish(File *file);
 
-BOOL read_file(File *file, uint32_t offset, uint8_t *buffer, uint32_t size);
+uint32_t read_file(File *file, uint32_t offset, uint8_t *buffer, uint32_t size);
 
 BOOL open_file(File *file, char *filename, char *extname);
 
