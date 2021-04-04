@@ -2,12 +2,12 @@
 <CodeBlocks_project_file>
 	<FileVersion major="1" minor="6" />
 	<Project>
-		<Option title="w25q32emu" />
+		<Option title="SPIFSV2" />
 		<Option pch_mode="2" />
 		<Option compiler="gcc" />
 		<Build>
 			<Target title="Debug">
-				<Option output="bin/Debug/w25q32emu" prefix_auto="1" extension_auto="1" />
+				<Option output="bin/Debug/SPIFSV2" prefix_auto="1" extension_auto="1" />
 				<Option object_output="obj/Debug/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
@@ -16,7 +16,7 @@
 				</Compiler>
 			</Target>
 			<Target title="Release">
-				<Option output="bin/Release/w25q32emu" prefix_auto="1" extension_auto="1" />
+				<Option output="bin/Release/SPIFSV2" prefix_auto="1" extension_auto="1" />
 				<Option object_output="obj/Release/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
@@ -31,6 +31,7 @@
 		<Compiler>
 			<Add option="-Wall" />
 		</Compiler>
+		<Unit filename="common_def.h" />
 		<Unit filename="diskio.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -38,6 +39,10 @@
 		<Unit filename="main.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="spi_flash.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="spi_flash.h" />
 		<Unit filename="spifs.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -47,9 +52,6 @@
 		</Unit>
 		<Unit filename="w25q32.h" />
 		<Extensions>
-			<code_completion />
-			<envvars />
-			<debugger />
 			<lib_finder disable_auto="1" />
 		</Extensions>
 	</Project>

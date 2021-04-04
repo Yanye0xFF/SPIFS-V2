@@ -1,53 +1,11 @@
 #include "diskio.h"
 
 /**
- * @brief 读取flashId
- * @return FLASH_ID
- */
-uint32_t spi_flash_get_id(void) {
-    return W25Q32_FLASH_ID;
-}
-
-/**
- * @brief falsh扇区擦除
- * @param sec 扇区号,从扇区0开始计数,每扇区4KB
- * @return SpiFlashOpResult
- */
-SpiFlashOpResult spi_flash_erase_sector(uint16_t sec) {
-    w25q32_sector_erase(sec * 0x1000);
-    return SPI_FLASH_RESULT_OK;
-}
-
-/**
- * @brief 4字节对齐写flash
- * @param des_addr 写入flash目的地址，任意地址
- * @param *src_addr 写入数据指针，四字节边界
- * @param size 数据长度,单位byte,四字节对齐
- * @return SpiFlashOpResult
- */
-SpiFlashOpResult spi_flash_write(uint32_t des_addr, uint32_t *src_addr, uint32_t size) {
-    w25q32_write_align(des_addr, src_addr, size);
-    return SPI_FLASH_RESULT_OK;
-}
-
-/**
- * @brief 4字节对齐写flash
- * @param src_addr 读取flash目的地址
- * @param *des_addr 存放数据指针
- * @param size 数据长度,单位byte,需要四字节对齐
- * @return SpiFlashOpResult
- */
-SpiFlashOpResult spi_flash_read(uint32_t src_addr, uint32_t *des_addr, uint32_t size) {
-    w25q32_read_align(src_addr, des_addr, size);
-    return SPI_FLASH_RESULT_OK;
-}
-
-/**
  * 写文件块记录
  * @param addr 物理地址
- * @param *fb 文件结构块指针
+ * @param *fb 文件结构块指针, 要求指针在4字节边界
  * */
-void write_fileblock(uint32_t addr, FileBlock *fb) {
+void ICACHE_FLASH_ATTR write_fileblock(uint32_t addr, FileBlock *fb) {
     // FileBlock已四字节对齐，可以强制指针转换
 	spi_flash_write(addr, (uint32_t *)fb, sizeof(FileBlock));
 }
@@ -58,8 +16,8 @@ void write_fileblock(uint32_t addr, FileBlock *fb) {
  * @param baseAddr 基址
  * @param offset 偏移量
  * */
-void clear_fileblock(uint8_t *baseAddr, uint32_t offset) {
-    memset((baseAddr + offset), 0xFF, FILEBLOCK_SIZE);
+void ICACHE_FLASH_ATTR clear_fileblock(uint8_t *baseAddr, uint32_t offset) {
+    os_memset((baseAddr + offset), 0xFF, FILEBLOCK_SIZE);
 }
 
 /**
@@ -67,7 +25,7 @@ void clear_fileblock(uint8_t *baseAddr, uint32_t offset) {
  * @param secAddr 写入扇区首地址
  * @param mark 标记符
  * */
-void update_sector_mark(uint32_t secAddr, uint32_t mark) {
+void ICACHE_FLASH_ATTR update_sector_mark(uint32_t secAddr, uint32_t mark) {
 	spi_flash_write(secAddr, &mark, sizeof(uint32_t));
 }
 
@@ -76,7 +34,7 @@ void update_sector_mark(uint32_t secAddr, uint32_t mark) {
  * @param fbaddr 文件块地址
  * @param cluster 首簇地址
  * */
-void write_fileblock_cluster(uint32_t fbaddr, uint32_t cluster) {
+void ICACHE_FLASH_ATTR write_fileblock_cluster(uint32_t fbaddr, uint32_t cluster) {
 	spi_flash_write(fbaddr + 12, &cluster, sizeof(uint32_t));
 }
 
@@ -85,7 +43,7 @@ void write_fileblock_cluster(uint32_t fbaddr, uint32_t cluster) {
  * @param fbaddr 文件块地址
  * @param length 文件长度
  * */
-void write_fileblock_length(uint32_t fbaddr, uint32_t length) {
+void ICACHE_FLASH_ATTR write_fileblock_length(uint32_t fbaddr, uint32_t length) {
 	spi_flash_write(fbaddr + 16, &length, sizeof(uint32_t));
 }
 
@@ -94,7 +52,7 @@ void write_fileblock_length(uint32_t fbaddr, uint32_t length) {
  * @param fbaddr 文件块地址
  * @param state 文件状态字段
  * */
-void write_fileblock_state(uint32_t fbaddr, uint8_t fstate) {
+void ICACHE_FLASH_ATTR write_fileblock_state(uint32_t fbaddr, uint8_t fstate) {
     FileInfo finfo;
     FileStatePack fspack;
     spi_flash_read(fbaddr + 20, (uint32_t *)&finfo, sizeof(uint32_t));

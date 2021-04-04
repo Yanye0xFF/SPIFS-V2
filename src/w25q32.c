@@ -1,7 +1,6 @@
 #include "w25q32.h"
 
 static uint8_t *w25q32_buffer = NULL;
-static uint8_t erase_impl(uint32_t address, uint32_t erase_size);
 
 void w25q32_allocate() {
     if(w25q32_buffer == NULL) {
@@ -47,35 +46,14 @@ uint8_t w25q32_chip_erase() {
 
 /**
  * @brief 扇区擦除 4KB, Tmin = 150ms
- * @param address 扇区起始地址,地址自动对齐到4K边界
+ * @param address 扇区起始地址
  * @return state register
  * */
 uint8_t w25q32_sector_erase(uint32_t address) {
-	return erase_impl(address, 0x1000);
-}
-
-/**
- * @brief 块擦除 32KB
- * @param address 32K块起始地址,地址自动对齐到32K边界
- * @return state register
- * */
-uint8_t w25q32_block_erase_32k(uint32_t address) {
-	return erase_impl(address, 0x8000);
-}
-
-/**
- * @brief 块擦除 64KB
- * @param address 64K块起始地址,地址自动对齐到64K边界
- * @return state register
- * */
-uint8_t w25q32_block_erase_64k(uint32_t address) {
-	return erase_impl(address, 0x10000);
-}
-
-static uint8_t erase_impl(uint32_t address, uint32_t size) {
-    memset((w25q32_buffer + address), 0xFF, size);
+    memset((w25q32_buffer + address), 0xFF, 4096);
 	return 0x2;
 }
+
 /**
  * @brief 四字节对齐读flash
  * @param src_addr flash地址, 四字节边界
@@ -95,57 +73,3 @@ void w25q32_read_align(uint32_t src_addr, uint32_t *des_addr, uint32_t size) {
 void w25q32_write_align(uint32_t des_addr, uint32_t *src_addr, uint32_t size) {
     memcpy((w25q32_buffer + des_addr), src_addr, size);
 }
-
-/**
- * @brief 读数据,不限制长度
- * @param buffer 写入数据缓冲区
- * @param size 写入数据长度
- * @param address 写入地址
- * @return state register
- * */
-uint32_t w25q32_read(uint32_t address, uint8_t *buffer, uint32_t size) {
-	if(buffer == NULL || size <= 0) {
-		return 0x00;
-	}
-	memcpy(buffer, (w25q32_buffer + address), size);
-	return size;
-}
-
-/**
- * @brief 写一页数据,最大256bytes
- * @brief 由于超出后会回到初始地址覆盖数据,故限制size <= 256
- * @param buffer 写入数据缓冲区
- * @param size 入数据长度
- * @param address 写入地址
- * @return state register
- * */
-uint8_t w25q32_write_page(uint32_t address, uint8_t *buffer, uint32_t size) {
-	if(buffer == NULL || size <= 0) {
-		return 0x00;
-	}
-	size = (size > 256) ? 256 : size;
-	memcpy((w25q32_buffer + address), buffer, size);
-	return 0x2;
-}
-
-/**
- * @brief 写多页数据,自动换页不限制长度
- * @param buffer 写入数据缓冲区
- * @param size 写入数据长度
- * @param address 写入地址
- * @return state register
- * */
-uint8_t w25q32_write_multipage(uint32_t address, uint8_t *buffer, uint32_t size) {
-	if(buffer == NULL || size <= 0) {
-		return 0x00;
-	}
-    uint32_t offset = 0, write_size = 0;
-    while(size) {
-        write_size = (size >= 256) ? 256 : (size % 256);
-        w25q32_write_page((address + offset), (buffer + offset), write_size);
-        offset += write_size;
-        size -= write_size;
-    }
-	return 0x2;
-}
-

@@ -8,15 +8,8 @@
 #ifndef _FILESYS_H_
 #define _FILESYS_H_
 
-#include "string.h"
-#include "stdlib.h"
-#include "stdint.h"
-#include "ctypes.h"
-
-#define os_memcpy    memcpy
-#define os_memset    memset
-
-
+#include "common_def.h"
+#include "spi_flash.h"
 
 #define MAJOR_VERSION    (0x2)
 #define MINOR_VERSION    (0x1)
@@ -29,7 +22,7 @@ typedef enum _filestatevalue {
     FILE_STATE_DEFAULT = 1
 } FileStateValue;
 
-// 文件状态字 (1字节) 权限描述: x表示禁止, o表示允许; 置为状态值:0, 默认状态值:1
+// 文件状态字 (1字节) 权限描述: x表示禁止, o表示允许; 置位状态值:0, 默认状态值:1
 typedef struct _file_state {
     // delete 0:删除, 1:正常文件
     // 置位权限: 读x 写x 重命名x 打开x
@@ -121,15 +114,11 @@ typedef enum _result {
     FILE_RENAME_SUCCESS
 } Result;
 
-/**
- * @brief 文件名类型枚举
- */
-typedef enum _filename_type {
-    // 文件名
-    FILENAME = 0,
-    // 文件拓展名
-    EXTNAME
-} FileNameType;
+typedef enum _gc_type {
+	GC_TYPE_FILEBLOCK = 0,
+	GC_TYPE_DATAAREA,
+	GC_TYPE_MAJOR
+} GCType;
 
 /**
  * @brief 文件写入方式枚举
@@ -145,9 +134,8 @@ typedef enum _write_method {
 
 /**
  * 文件簇大小 = 扇区大小 = 4KB
- * 文件簇: 扇区头部标记字4字节, 数据区4088字节, 最后4字节为下一簇物理地址, FFFFFFFF表示文件结束
+ * 文件簇: 扇区标记字4字节, 数据区4088字节, 最后4字节为下一簇物理地址, FFFFFFFF表示文件结束
  * */
-
 // 使用空指针检查
 #define SPIFS_USE_NULL_CHECK
 
@@ -169,12 +157,13 @@ typedef enum _write_method {
 // 扇区使用中标记大小(字节)
 #define SECTOR_MARK_SIZE       4
 // 扇区使用中标记
-#define SECTOR_INUSE_FLAG      (0xFFFFFFF0)
+#define SECTOR_INUSE_FLAG      (0xFFFFFFFA)
 // 扇区数据废弃标记
-#define SECTOR_DISCARD_FLAG    (0xFFFFFF00)
+#define SECTOR_DISCARD_FLAG    (0xFFFFFFAA)
+
 // 空数据值, 适配flash擦除后全为1
-#define EMPTY_INT_VALUE          (0xFFFFFFFF)
-#define EMPTY_BYTE_VALUE         (0xFF)
+#define EMPTY_INT_VALUE        (0xFFFFFFFF)
+#define EMPTY_BYTE_VALUE       (0xFF)
 
 // Flash页大小(字节)
 #define PAGE_SIZE          256
@@ -199,38 +188,44 @@ typedef enum _write_method {
 #define DAY_MINI_VALUE     1
 #define DAY_MAX_VALUE      31
 
-BOOL make_file(File *file, char *filename, char *extname);
+BOOL ICACHE_FLASH_ATTR make_file(File *file, char *filename, char *extname);
 
-BOOL make_finfo(FileInfo *finfo, uint32_t year, uint8_t month, uint8_t day, uint8_t fstate);
+BOOL ICACHE_FLASH_ATTR make_finfo(FileInfo *finfo, uint32_t year, uint8_t month, uint8_t day, uint8_t fstate);
 
-Result create_file(File *file, FileInfo *finfo);
+Result ICACHE_FLASH_ATTR create_file(File *file, FileInfo *finfo);
 
-Result write_file(File *file, uint8_t *buffer, uint32_t size, WriteMethod method);
+Result ICACHE_FLASH_ATTR write_file(File *file, uint8_t *buffer, uint32_t size, WriteMethod method);
 
-Result write_finish(File *file);
+Result ICACHE_FLASH_ATTR write_finish(File *file);
 
-uint32_t read_file(File *file, uint32_t offset, uint8_t *buffer, uint32_t size);
+uint32_t ICACHE_FLASH_ATTR read_file(File *file, uint32_t offset, uint8_t *buffer, uint32_t size);
 
-BOOL open_file(File *file, char *filename, char *extname);
+BOOL ICACHE_FLASH_ATTR open_file(File *file, char *filename, char *extname);
 
-BOOL open_file_raw(File *file, uint8_t *filename, uint8_t *extname);
+BOOL ICACHE_FLASH_ATTR open_file_raw(File *file, uint8_t *filename, uint8_t *extname);
 
-Result rename_file(File *file, char *filename, char *extname);
+Result ICACHE_FLASH_ATTR rename_file(File *file, char *filename, char *extname);
 
-void delete_file(File *file);
+Result ICACHE_FLASH_ATTR rename_file_raw(File *file, uint8_t *filename, uint8_t *extname);
 
-uint32_t list_file(File *files, uint32_t max, uint32_t *nextAddress);
+void ICACHE_FLASH_ATTR delete_file(File *file);
 
-BOOL read_finfo(File *file, FileInfo *finfo);
+uint32_t ICACHE_FLASH_ATTR list_file(uint32_t *startAddr, File *files, uint32_t max);
 
-void spifs_gc(void);
+uint32_t ICACHE_FLASH_ATTR list_file_raw(uint32_t *startAddr, uint8_t *buffer, uint32_t max);
 
-void spifs_format(void);
+BOOL ICACHE_FLASH_ATTR read_finfo(File *file, FileInfo *finfo);
 
-uint32_t spifs_avail_sector(void);
+uint32_t ICACHE_FLASH_ATTR spifs_gc(GCType tp, uint32_t nums);
 
-uint32_t spifs_avail_files(void);
+void ICACHE_FLASH_ATTR spifs_format();
 
-uint16_t spifs_get_version(void);
+BOOL ICACHE_FLASH_ATTR spifs_erase_sector(uint32_t sec);
+
+uint32_t ICACHE_FLASH_ATTR spifs_avail_sector();
+
+uint32_t ICACHE_FLASH_ATTR spifs_avail_files();
+
+uint16_t ICACHE_FLASH_ATTR spifs_get_version();
 
 #endif

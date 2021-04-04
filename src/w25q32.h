@@ -10,12 +10,6 @@
 #define W25Q32_SIZE        1048576
 #define W25Q32_FLASH_ID    0x401615
 
-typedef enum {
-    SPI_FLASH_RESULT_OK,
-    SPI_FLASH_RESULT_ERR,
-    SPI_FLASH_RESULT_TIMEOUT
-} SpiFlashOpResult;
-
 void w25q32_allocate();
 void w25q32_destory();
 
@@ -25,13 +19,7 @@ uint8_t w25q32_output(const char *filePath, const char *mode, uint32_t offset, u
 void w25q32_read_align(uint32_t src_addr, uint32_t *des_addr, uint32_t size);
 void w25q32_write_align(uint32_t des_addr, uint32_t *src_addr, uint32_t size);
 
-uint32_t w25q32_read(uint32_t address, uint8_t *buffer, uint32_t size);
-uint8_t w25q32_write_page(uint32_t address, uint8_t *buffer, uint32_t size);
-uint8_t w25q32_write_multipage(uint32_t address, uint8_t *buffer, uint32_t size);
-
 uint8_t w25q32_chip_erase();
 uint8_t w25q32_sector_erase(uint32_t address);
-uint8_t w25q32_block_erase_32k(uint32_t address);
-uint8_t w25q32_block_erase_64k(uint32_t address);
 
 #endif

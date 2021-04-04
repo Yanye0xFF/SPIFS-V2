@@ -1,15 +1,10 @@
 #include <stdio.h>
 #include "spifs.h"
 #include "w25q32.h"
-#include "string.h"
-#include <time.h>
-#include "ctypes.h"
+#include "common_def.h"
 
 #define OUTPUTPATH    ("G:\\ramdisk")
-
 #define LOCALIZATION
-//#undef LOCALIZATION
-
 
 static void display_fname(File *file);
 void disp_list(File *file, uint32_t total);
@@ -20,26 +15,18 @@ static void read_test();
 static void rename_test();
 static void append_exist_file_test();
 
-static uint8_t byteStrTohex(uint8_t *str);
-
-static Short queryGB2312ByUnicode(Short unicode);
-
-uint8_t *unicodeTogb2312(uint8_t *unicode);
-
 int main(int argc, char **argv) {
-
-    uint16_t spifs_version;
 
     w25q32_allocate();
     printf("init flash finish\n");
 
-    spifs_version = spifs_get_version();
+    uint16_t spifs_version = spifs_get_version();
     printf("spifs version:%d.%d\n", (spifs_version >> 8 & 0xFF), (spifs_version & 0xFF));
 
     spifs_format();
     printf("spifs format\n");
 
-    printf("platform:%d\n", sizeof(size_t));
+    printf("platform:%I64dbit\n", (sizeof(size_t) * 8));
 
     /*
     load_into("G:\\font\\GB2312.bin", "GB2312", "bin");
@@ -54,17 +41,17 @@ int main(int argc, char **argv) {
 
     test_create();
 
-    //append_exist_file_test();
+    append_exist_file_test();
 
-    //read_test();
+    read_test();
 
-    //rename_test();
+    rename_test();
 
     File filse[8];
     uint32_t next = 0, find = 0;
 
     // 文件列出
-    find = list_file(filse, 8, &next);
+    find = list_file(&next, filse, 8);
     printf("list_file: %d\n", find);
 
     disp_list(filse, find);
@@ -153,69 +140,68 @@ static void test_create() {
 
     result = create_file(&file, &finfo);
 
+    printf("test_create: ");
+
     if(result == CREATE_FILE_SUCCESS) {
-        puts("> CREATE_FILE_SUCCESS");
+        printf("> CREATE_FILE_SUCCESS");
         printf("> file.block:0x%x\n", file.block);
 
-        puts("address & length align write test:");
+        printf("address and length aligned write test: ");
         // 对齐追加写入测试
         memset(buffer, 0xAA, sizeof(uint8_t) * 16);
         result = write_file(&file, buffer, 12, APPEND);
-        if(result == WRITE_FILE_SUCCESS) {
-            puts("> WRITE_FILE_SUCCESS");
-        }else if(result == APPEND_FILE_SUCCESS) {
+        if(result == APPEND_FILE_SUCCESS) {
             puts("> APPEND_FILE_SUCCESS");
         }else {
             printf("> write_file err:%d\n", result);
         }
 
-        puts("length not align write test:");
+        printf("length not aligned write test: ");
         // 非对齐追加写入测试
         memset(buffer, 0xBB, sizeof(uint8_t) * 12);
         result = write_file(&file, buffer, 3, APPEND);
-
-        if(result == WRITE_FILE_SUCCESS) {
-            puts("> WRITE_FILE_SUCCESS");
-        }else if(result == APPEND_FILE_SUCCESS) {
+        if(result == APPEND_FILE_SUCCESS) {
             puts("> APPEND_FILE_SUCCESS");
         }else {
             printf("> write_file err:%d\n", result);
         }
 
-        puts("address not align write test:");
+        printf("address not aligned write test: ");
         // 对齐追加写入测试
         memset(buffer, 0xCC, sizeof(uint8_t) * 16);
-        result = write_file(&file, buffer + 1, 8, APPEND);
-        if(result == WRITE_FILE_SUCCESS) {
-            puts("> WRITE_FILE_SUCCESS");
-        }else if(result == APPEND_FILE_SUCCESS) {
+        result = write_file(&file, (buffer + 1), 8, APPEND);
+        if(result == APPEND_FILE_SUCCESS) {
             puts("> APPEND_FILE_SUCCESS");
         }else {
             printf("> write_file err:%d\n", result);
         }
 
-        puts("address & length not align write test:");
+        printf("address & length not aligned write test: ");
         // 对齐追加写入测试
         memset(buffer, 0xDD, sizeof(uint8_t) * 16);
-        result = write_file(&file, buffer + 2, 1, APPEND);
-        if(result == WRITE_FILE_SUCCESS) {
-            puts("> WRITE_FILE_SUCCESS");
-        }else if(result == APPEND_FILE_SUCCESS) {
+        result = write_file(&file, buffer + 2, 5, APPEND);
+        if(result == APPEND_FILE_SUCCESS) {
             puts("> APPEND_FILE_SUCCESS");
         }else {
             printf("> write_file err:%d\n", result);
         }
 
         write_finish(&file);
+
         // 覆盖写测试
-        /*
+        printf("override write test: ");
         for(uint32_t i = 0; i < 12; i++) {
             *(buffer + i) = i;
         }
         result = write_file(&file, buffer, 12, OVERRIDE);
-        */
+        if(result == WRITE_FILE_SUCCESS) {
+            puts("> WRITE_FILE_SUCCESS");
+        }else {
+            printf("> write_file err:%d\n", result);
+        }
+    }else {
+        printf("> create_file err:%d\n", result);
     }
-
 }
 
 static void append_exist_file_test() {
@@ -223,20 +209,32 @@ static void append_exist_file_test() {
     Result result;
     uint8_t buffer[16];
 
-    memset(buffer, 0xCC, 15);
+    memset(buffer, 0xCC, 13);
+
+    printf("append_exist_file_test\n");
 
     if(open_file(&file, "tiimage", "c")) {
-        printf("Open file success!\n");
+        printf("open file success!\n");
 
-        result = write_file(&file, buffer, 15, APPEND);
-        printf("> write_file result:%d\n", result);
+        printf("append file: ");
+        result = write_file(&file, buffer, 13, APPEND);
+        if(result == APPEND_FILE_SUCCESS) {
+            printf("> APPEND_FILE_SUCCESS\n");
+        }else {
+            printf("> append file err:%d\n", result);
+        }
 
+        printf("write finish: ");
         result = write_finish(&file);
-        printf("> write_finish result:%d\n", result);
-
-        return;
+        if(result == APPEND_FILE_FINISH) {
+            printf("> APPEND_FILE_FINISH\n");
+        }else {
+            printf("> write finish err:%d\n", result);
+        }
+    }else {
+        printf("open file failed!\n");
     }
-    printf("Open file failed!\n");
+
 }
 
 static void read_test() {
@@ -244,6 +242,8 @@ static void read_test() {
     BOOL result;
     File file;
     // 打开文件测试
+    puts("read_test");
+
     if(open_file(&file, "tiimage", "c")) {
 
         printf("open_file success\n");
@@ -251,25 +251,29 @@ static void read_test() {
         memset(buffer, 0x00, 16);
 
         // 偏移/长度对齐读
+        printf("offset and length aligned read: ");
         result = read_file(&file, 0, buffer, 8);
-        printf("> read file result:%d\n", result);
+        printf("> actually read in:%d bytes\n", result);
         for(uint32_t i = 0; i < 8; i++) {
             printf("0x%x ", buffer[i]);
         }
         printf("\n");
 
         // 偏移不对齐，长度对齐
+        printf("offset not aligned read: ");
         memset(buffer, 0x00, 16);
         result = read_file(&file, 3, buffer, 8);
-        printf("> read file result:%d\n", result);
+        printf("> actually read in:%d bytes\n", result);
         for(uint32_t i = 0; i < 8; i++) {
             printf("0x%x ", buffer[i]);
         }
         printf("\n");
         // 偏移不对齐，长度不对齐
+
+        printf("offset and length not aligned read: ");
         memset(buffer, 0x00, 16);
         result = read_file(&file, 3, buffer, 7);
-        printf("> read file result:%d\n", result);
+        printf("> actually read in:%d bytes\n", result);
         for(uint32_t i = 0; i < 7; i++) {
             printf("0x%x ", buffer[i]);
         }

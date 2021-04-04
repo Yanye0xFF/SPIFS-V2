@@ -1,0 +1,45 @@
+# depslib dependency file v1.0
+1617519735 source:e:\cppprojects\spifsv2\w25q32.c
+	"w25q32.h"
+
+1617519473 e:\cppprojects\spifsv2\w25q32.h
+	<stdio.h>
+	<stdint.h>
+	<stdlib.h>
+	<string.h>
+
+1617519941 source:e:\cppprojects\spifsv2\diskio.c
+	"diskio.h"
+
+1617520214 e:\cppprojects\spifsv2\diskio.h
+	"common_def.h"
+	"spi_flash.h"
+	"spifs.h"
+
+1617522038 e:\cppprojects\spifsv2\common_def.h
+	<string.h>
+	<stdint.h>
+	<stdlib.h>
+
+1617521923 e:\cppprojects\spifsv2\spi_flash.h
+	"w25q32.h"
+
+1617530095 e:\cppprojects\spifsv2\spifs.h
+	"common_def.h"
+	"spi_flash.h"
+	"diskio.h"
+
+1617529913 source:e:\cppprojects\spifsv2\spifs.c
+	"spifs.h"
+
+1617521987 source:e:\cppprojects\spifsv2\spi_flash.c
+	"spi_flash.h"
+
+1617529128 source:e:\cppprojects\spifsv2\main.c
+	<stdio.h>
+	"spifs.h"
+	"w25q32.h"
+	"string.h"
+	"common_def.h"
+	<time.h>
+
