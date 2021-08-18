@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
     printf("> spifs_avail_sectors:%d\n", availSector);
 
     #ifdef LOCALIZATION
-        uint8_t code = w25q32_output(OUTPUTPATH, "wb+", 0x0, 49152);
+        uint8_t code = w25q32_output(OUTPUTPATH, "wb+", FB_SECTOR_START * SECTOR_SIZE, 512 * 1024);
         if(code) {
             puts("> w25q32_output");
         }

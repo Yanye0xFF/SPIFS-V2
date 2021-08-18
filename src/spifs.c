@@ -1,5 +1,11 @@
 #include "spifs.h"
 
+// FTL可擦除扇区Bitmap表, 0:扇区不可擦除(空白扇区或带数据扇区), 1:扇区可擦除(标记为SECTOR_DISCARD_FLAG)
+static uint32_t FTL_ERASABLE_TABLE[FTL_SIZE];
+
+// FTL空白扇区Bitmap表, 0:扇区不是空白(带数据或标记为可擦除), 1:扇区空白(标记为EMPTY_INT_VALUE)
+static uint32_t FTL_WRITABLE_TABLE[FTL_SIZE];
+
 static uint32_t ICACHE_FLASH_ATTR strlen_ext(uint8_t *str, uint32_t max) ;
 
 static BOOL ICACHE_FLASH_ATTR fb_has_name(uint8_t *fb_buffer);
@@ -15,6 +21,10 @@ static Result ICACHE_FLASH_ATTR rename_file_impl(File *file, uint8_t *filename, 
 static void ICACHE_FLASH_ATTR align_write_impl(uint8_t *buffer, uint32_t offset, uint32_t write_addr, uint32_t write_size);
 
 static void ICACHE_FLASH_ATTR align_read_impl(uint8_t *buffer, uint32_t offset, uint32_t read_addr, uint32_t read_size);
+
+static void spifs_ftl_mark(uint32_t *table, uint32_t position, uint32_t bitValue);
+
+static uint32_t spifs_ftl_get(uint32_t *table, uint32_t position);
 
 /**
  * @brief 配置文件信息字段
@@ -103,7 +113,7 @@ Result ICACHE_FLASH_ATTR create_file(File *file, FileInfo *finfo) {
     FIND_FB_SPACE:
     for(fb_index = FB_SECTOR_START; (fb_index < (FB_SECTOR_END + 1)) && (!find_empty_sector); fb_index++) {
         addr_start = fb_index * SECTOR_SIZE;
-        addr_end = (addr_start + SECTOR_SIZE - 1);
+        addr_end = (addr_start + SECTOR_SIZE);
         while((addr_end - addr_start) >= FILEBLOCK_SIZE) {
             spi_flash_read(addr_start, (uint32_t *)fb_buffer, FILEBLOCK_SIZE);
             // check filename and extname
@@ -175,6 +185,7 @@ Result ICACHE_FLASH_ATTR write_file(File *file, uint8_t *buffer, uint32_t length
     if(method == OVERRIDE && (file->cluster != EMPTY_INT_VALUE)) {
         // 根据链表标记文件占用扇区废弃
         while(file->cluster != EMPTY_INT_VALUE) {
+        	spifs_ftl_mark(FTL_ERASABLE_TABLE, (file->cluster / SECTOR_SIZE), FTL_MARK);
             update_sector_mark(file->cluster, SECTOR_DISCARD_FLAG);
             spi_flash_read((file->cluster + DATA_AREA_SIZE + SECTOR_MARK_SIZE), &temp, sizeof(uint32_t));
             file->cluster = temp;
@@ -234,20 +245,21 @@ NEXT_PART_WRITE:
     		find_empty_sector(sector_list, sectors);
     		break;
     	}
+    	os_free(sector_list);
     	return NO_SECTOR_SPACE;
     }while(0);
 
     // 更新文件索引信息
     if(method == OVERRIDE) {
-        write_fileblock_cluster(file->block, *(sector_list + 0));
+        write_fileblock_cluster(file->block, sector_list[0]);
         write_fileblock_length(file->block, length);
-        file->cluster = *(sector_list + 0);
+        file->cluster = sector_list[0];
         file->length = length;
     }else {
         if(file->cluster == EMPTY_INT_VALUE) {
         	// 对空文件追加, 仅写入首簇号
-            write_fileblock_cluster(file->block, *(sector_list + 0));
-            file->cluster = *(sector_list + 0);
+            write_fileblock_cluster(file->block, sector_list[0]);
+            file->cluster = sector_list[0];
             file->length = length;
         }else {
             spi_flash_write(write_addr, (sector_list + 0), sizeof(uint32_t));
@@ -257,9 +269,10 @@ NEXT_PART_WRITE:
 
     for(i = 0; i < sectors; i++) {
         // 写入地址偏移4字节
-        write_addr = (*(sector_list + i) + SECTOR_MARK_SIZE);
+        write_addr = (sector_list[i] + SECTOR_MARK_SIZE);
         // 写占用标记
-        update_sector_mark(*(sector_list + i), SECTOR_INUSE_FLAG);
+        update_sector_mark(sector_list[i], SECTOR_INUSE_FLAG);
+        spifs_ftl_mark(FTL_WRITABLE_TABLE, (sector_list[i] / SECTOR_SIZE), FTL_UNMARK);
 
         write_size = (length >= DATA_AREA_SIZE) ? DATA_AREA_SIZE : length;
         align_write_impl(buffer, offset, write_addr, write_size);
@@ -512,7 +525,7 @@ static BOOL ICACHE_FLASH_ATTR open_file_impl(File *file, uint8_t *filename, uint
     for(i = FB_SECTOR_START; i < (FB_SECTOR_END + 1); i++) {
 
         addr_start = i * SECTOR_SIZE;
-        addr_end = (addr_start + SECTOR_SIZE - 1);
+        addr_end = (addr_start + SECTOR_SIZE);
 
         while((addr_end - addr_start) >= FILEBLOCK_SIZE) {
             spi_flash_read(addr_start, (uint32_t *)slot_buffer, FILEBLOCK_SIZE);
@@ -576,17 +589,15 @@ static Result ICACHE_FLASH_ATTR rename_file_impl(File *file, uint8_t *filename, 
         if(fnamelen > FILENAME_SIZE || extnamelen > EXTNAME_SIZE) {
             return FILENAME_OUT_OF_BOUNDS;
         }
-
-
         if(spifs_avail_files() > 0) {
             // 标记文件索引表原始文件对应文件块失效，但不执行擦除操作
             write_fileblock_state(file->block, FSTATE_DEPRECATE);
             // 清空原文件名
-            os_memset((file->filename), EMPTY_BYTE_VALUE, FILENAME_SIZE);
-            os_memset((file->extname), EMPTY_BYTE_VALUE, EXTNAME_SIZE);
-            // 复制新文件名到file
-            os_memcpy(file->filename, filename, fnamelen);
-            os_memcpy(file->extname, extname, extnamelen);
+			os_memset((file->filename), EMPTY_BYTE_VALUE, FILENAME_SIZE);
+			os_memset((file->extname), EMPTY_BYTE_VALUE, EXTNAME_SIZE);
+			// 复制新文件名到file
+			os_memcpy(file->filename, filename, fnamelen);
+			os_memcpy(file->extname, extname, extnamelen);
             // 重新创建文件索引块
             return (CREATE_FILE_SUCCESS == create_file(file, &fileinfo)) ? FILE_RENAME_SUCCESS : NO_FILEBLOCK_SPACE;
         }
@@ -602,47 +613,50 @@ static Result ICACHE_FLASH_ATTR rename_file_impl(File *file, uint8_t *filename, 
  * @return count 实际查找到的文件数量(count <= max)
  * */
 uint32_t ICACHE_FLASH_ATTR list_file(uint32_t *startAddr, File *files, uint32_t max) {
-    BOOL firstIn = TRUE;
 	uint32_t addr_start, addr_end, count = 0;
 	FileBlock *fb;
-    uint8_t buffer[FILEBLOCK_SIZE];
+	uint8_t fileblock[FILEBLOCK_SIZE];
 	uint32_t sector = ((*startAddr) / SECTOR_SIZE);
 
-	for(; (sector < (FB_SECTOR_END + 1)) && (count < max); sector++) {
-		if(firstIn) {
-			firstIn = FALSE;
-			addr_start = (*startAddr);
-			addr_end = (sector * SECTOR_SIZE + SECTOR_SIZE - 1);
-		}else {
-	        addr_start = sector * SECTOR_SIZE;
-	        addr_end = (addr_start + SECTOR_SIZE - 1);
+	addr_start = (*startAddr);
+	addr_end = (sector * SECTOR_SIZE + SECTOR_SIZE);
+
+	while((sector < (FB_SECTOR_END + 1)) && (count < max)) {
+
+		// addr_end不减1，(addr_end - addr_start)也不需要+1
+		while((addr_end - addr_start) >= FILEBLOCK_SIZE) {
+
+			spi_flash_read(addr_start, (uint32_t *)fileblock, FILEBLOCK_SIZE);
+			fb = (FileBlock *)fileblock;
+
+			if((fb->info.state.del & fb->info.state.dep) && (fb->cluster != EMPTY_INT_VALUE)) {
+				// FileBlock转File结构
+				os_memcpy((files + count)->filename, fb->filename, FILENAME_SIZE);
+				os_memcpy((files + count)->extname, fb->extname, EXTNAME_SIZE);
+				(files + count)->block = addr_start;
+				(files + count)->cluster = fb->cluster;
+				(files + count)->length = fb->length;
+				count++;
+			}
+			// 自增地址
+			addr_start += FILEBLOCK_SIZE;
+			if(count >= max) {
+				if((addr_end - addr_start) >= FILEBLOCK_SIZE) {
+					// 下一FILEBLOCK地址在当前扇区
+					*startAddr = addr_start;
+				}else {
+					// 切换到下一扇区首地址
+					sector++;
+					// startAddr地址限制在FB_SECTOR_END扇区内
+					*startAddr = (sector < (FB_SECTOR_END + 1)) ? (sector * SECTOR_SIZE) : (FB_SECTOR_START * SECTOR_SIZE);
+				}
+				break;
+			}
 		}
-        while(addr_end - addr_start >= FILEBLOCK_SIZE) {
-		   spi_flash_read(addr_start, (uint32_t *)buffer, FILEBLOCK_SIZE);
-		   fb = (FileBlock *)buffer;
-		   if((fb->info.state.del & fb->info.state.dep) && (fb->cluster != EMPTY_INT_VALUE)) {
-			   // FileBlock转File结构
-			   os_memcpy((files + count)->filename, fb->filename, FILENAME_SIZE);
-			   os_memcpy((files + count)->extname, fb->extname, EXTNAME_SIZE);
-			   (files + count)->block = addr_start;
-			   (files + count)->cluster = fb->cluster;
-			   (files + count)->length = fb->length;
-			   count++;
-		   }
-		   addr_start += FILEBLOCK_SIZE;
-		   if(count >= max) {
-			   if((addr_end - addr_start) <= FILEBLOCK_SIZE) {
-				   // 下一FILEBLOCK地址在当前扇区
-				   *startAddr = addr_start;
-			   }else {
-				   // 切换到下一扇区首地址
-				   sector = (sector + 1);
-				   // startAddr地址限制在FB_SECTOR_END扇区内
-				   *startAddr = (sector < (FB_SECTOR_END + 1)) ? (sector * SECTOR_SIZE) : (FB_SECTOR_START * SECTOR_SIZE);
-			   }
-			   break;
-		   }
-	   }
+		// 切换到下一扇区
+		sector++;
+		addr_start = (sector * SECTOR_SIZE);
+		addr_end = (addr_start + SECTOR_SIZE);
 	}
 	return count;
 }
@@ -655,52 +669,55 @@ uint32_t ICACHE_FLASH_ATTR list_file(uint32_t *startAddr, File *files, uint32_t 
  * @return 实际获取的数量，startAddr指向的内存会被修改返回
  * */
 uint32_t ICACHE_FLASH_ATTR list_file_raw(uint32_t *startAddr, uint8_t *buffer, uint32_t max) {
-    BOOL firstIn = TRUE;
 	uint32_t addr_start, addr_end, count = 0;
     FileBlock *fb;
     uint8_t fileblock[FILEBLOCK_SIZE];
 	uint32_t sector = ((*startAddr) / SECTOR_SIZE);
 
-	for(; (sector < (FB_SECTOR_END + 1)) && (count < max); sector++) {
-		if(firstIn) {
-			firstIn = FALSE;
-			addr_start = (*startAddr);
-			addr_end = (sector * SECTOR_SIZE + SECTOR_SIZE - 1);
-		}else {
-	        addr_start = sector * SECTOR_SIZE;
-	        addr_end = (addr_start + SECTOR_SIZE - 1);
+	addr_start = (*startAddr);
+	addr_end = (sector * SECTOR_SIZE + SECTOR_SIZE);
+
+	while((sector < (FB_SECTOR_END + 1)) && (count < max)) {
+
+		// addr_end不减1，(addr_end - addr_start)也不需要+1
+		while((addr_end - addr_start) >= FILEBLOCK_SIZE) {
+
+			spi_flash_read(addr_start, (uint32_t *)fileblock, FILEBLOCK_SIZE);
+			fb = (FileBlock *)fileblock;
+
+			if((fb->info.state.del & fb->info.state.dep) && (fb->cluster != EMPTY_INT_VALUE) && (fb->length != EMPTY_INT_VALUE)) {
+				// File结构
+				os_memcpy((buffer + count * 28), fileblock, FILENAME_SIZE);
+				os_memcpy((buffer + count * 28 + FILENAME_SIZE), (fileblock + FILENAME_SIZE), EXTNAME_SIZE);
+				// 文件索引记录地址
+				os_memcpy((buffer + count * 28 + FILENAME_FULLSIZE), &addr_start, sizeof(uint32_t));
+				// 首簇地址
+				os_memcpy((buffer + count * 28 + 16), (fileblock + FILENAME_FULLSIZE), sizeof(uint32_t));
+				// 文件大小
+				os_memcpy((buffer + count * 28 + 20), (fileblock + 16), sizeof(uint32_t));
+				// FileInfo结构
+				os_memcpy((buffer + count * 28 + 24), (fileblock + 20), sizeof(uint32_t));
+				count++;
+			}
+			// 自增地址
+			addr_start += FILEBLOCK_SIZE;
+			if(count >= max) {
+				if((addr_end - addr_start) >= FILEBLOCK_SIZE) {
+					// 下一FILEBLOCK地址在当前扇区
+					*startAddr = addr_start;
+				}else {
+					// 切换到下一扇区首地址
+					sector++;
+					// startAddr地址限制在FB_SECTOR_END扇区内
+					*startAddr = (sector < (FB_SECTOR_END + 1)) ? (sector * SECTOR_SIZE) : (FB_SECTOR_START * SECTOR_SIZE);
+				}
+				break;
+			}
 		}
-        while(addr_end - addr_start >= FILEBLOCK_SIZE) {
-		   spi_flash_read(addr_start, (uint32_t *)fileblock, FILEBLOCK_SIZE);
-		   fb = (FileBlock *)fileblock;
-		   if((fb->info.state.del & fb->info.state.dep) && (fb->cluster != EMPTY_INT_VALUE)) {
-			   // File结构
-			   os_memcpy((buffer + count * 28), fileblock, FILENAME_SIZE);
-			   os_memcpy((buffer + count * 28 + FILENAME_SIZE), (fileblock + FILENAME_SIZE), EXTNAME_SIZE);
-			   // 文件索引记录地址
-			   os_memcpy((buffer + count * 28 + FILENAME_FULLSIZE), &addr_start, sizeof(uint32_t));
-			   // 首簇地址
-			   os_memcpy((buffer + count * 28 + 16), (fileblock + FILENAME_FULLSIZE), sizeof(uint32_t));
-			   // 文件大小
-			   os_memcpy((buffer + count * 28 + 20), (fileblock + 16), sizeof(uint32_t));
-			   // FileInfo结构
-			   os_memcpy((buffer + count * 28 + 24), (fileblock + 20), sizeof(uint32_t));
-			   count++;
-		   }
-		   addr_start += FILEBLOCK_SIZE;
-		   if(count >= max) {
-			   if((addr_end - addr_start) <= FILEBLOCK_SIZE) {
-				   // 下一FILEBLOCK地址在当前扇区
-				   *startAddr = addr_start;
-			   }else {
-				   // 切换到下一扇区首地址
-				   sector = (sector + 1);
-				   // startAddr地址限制在FB_SECTOR_END扇区内
-				   *startAddr = (sector < (FB_SECTOR_END + 1)) ? (sector * SECTOR_SIZE) : (FB_SECTOR_START * SECTOR_SIZE);
-			   }
-			   break;
-		   }
-	   }
+		// 切换到下一扇区
+		sector++;
+		addr_start = (sector * SECTOR_SIZE);
+		addr_end = (addr_start + SECTOR_SIZE);
 	}
 	return count;
 }
@@ -735,13 +752,13 @@ BOOL ICACHE_FLASH_ATTR read_finfo(File *file, FileInfo *finfo) {
  * @return TRUE: 成功找到nums个空扇区, FALSE: 空扇区数量 < nums
  * */
 static BOOL ICACHE_FLASH_ATTR find_empty_sector(uint32_t *secList, uint32_t nums) {
-    uint32_t sector_index, sector_mark, cnt = 0;
+    uint32_t sector_index, cnt = 0;
     for(sector_index = DATA_SECTOR_START; ((cnt < nums) && (sector_index < (DATA_SECTOR_END + 1))); sector_index++) {
-        spi_flash_read((sector_index * SECTOR_SIZE), &sector_mark, sizeof(uint32_t));
-        if(sector_mark == EMPTY_INT_VALUE) {
-            *(secList + cnt) = (sector_index * SECTOR_SIZE);
-            cnt++;
-        }
+    	if(spifs_ftl_get(FTL_WRITABLE_TABLE, sector_index)) {
+			spifs_ftl_mark(FTL_WRITABLE_TABLE, sector_index, FTL_UNMARK);
+			 *(secList + cnt) = (sector_index * SECTOR_SIZE);
+			 cnt++;
+		}
     }
     return (cnt == nums);
 }
@@ -758,6 +775,7 @@ void ICACHE_FLASH_ATTR delete_file(File *file) {
 		write_fileblock_state(file->block, FSTATE_DELETE);
         // 根据链表标记文件占用扇区废弃
         while(file->cluster != EMPTY_INT_VALUE) {
+        	spifs_ftl_mark(FTL_ERASABLE_TABLE, (file->cluster / SECTOR_SIZE), FTL_MARK);
             update_sector_mark(file->cluster, SECTOR_DISCARD_FLAG);
             spi_flash_read((file->cluster + DATA_AREA_SIZE + SECTOR_MARK_SIZE), &cluster, sizeof(uint32_t));
             file->cluster = cluster;
@@ -766,6 +784,54 @@ void ICACHE_FLASH_ATTR delete_file(File *file) {
 		file->cluster = EMPTY_INT_VALUE;
 		file->length = EMPTY_INT_VALUE;
 	}
+}
+
+/**
+ * @brief 建立FTL表，上电时调用，仅索引 DATA_SECTOR分区
+ * */
+void ICACHE_FLASH_ATTR spifs_ftl_init(void) {
+	uint32_t i, readIn, bitValue;
+
+	os_memset(FTL_ERASABLE_TABLE, 0x00, sizeof(FTL_ERASABLE_TABLE));
+	os_memset(FTL_WRITABLE_TABLE, 0x00, sizeof(FTL_WRITABLE_TABLE));
+
+	for(i = DATA_SECTOR_START; i < (DATA_SECTOR_END + 1); i++) {
+		// LSB      MSB
+		spi_flash_read((i * SECTOR_SIZE), &readIn, sizeof(uint32_t));
+
+		// AA FF FF FF 标记为废弃扇区
+		bitValue = !((readIn >> 4) & 0x1);
+		spifs_ftl_mark(FTL_ERASABLE_TABLE, i, bitValue);
+
+		// FF FF FF FF 空扇区
+		bitValue = (readIn & 0x1);
+		spifs_ftl_mark(FTL_WRITABLE_TABLE, i, bitValue);
+	}
+}
+
+/**
+ * @brief 标记FTL擦除表
+ * @param position 0~1023
+ * @param bitValue only 0 or 1
+ * */
+static void spifs_ftl_mark(uint32_t *table, uint32_t position, uint32_t bitValue) {
+	uint32_t index, offset;
+
+	index = (position / BITS_OF_INTEGER);
+	offset = (position - index * BITS_OF_INTEGER);
+
+	table[index] &= ~((uint32_t)0x1 << offset);
+	table[index] |= (bitValue << offset);
+}
+
+static uint32_t spifs_ftl_get(uint32_t *table, uint32_t position) {
+	uint32_t index, offset, bitValue;
+
+	index = (position / BITS_OF_INTEGER);
+	offset = (position - index * BITS_OF_INTEGER);
+	bitValue = ((table[index] >> offset) & 0x1);
+
+	return bitValue;
 }
 
 /**
@@ -785,7 +851,7 @@ uint32_t ICACHE_FLASH_ATTR spifs_gc(GCType tp, uint32_t nums) {
     BOOL rewrite = FALSE;
     uint8_t slot_buffer[FILEBLOCK_SIZE];
     uint32_t offset, fb_index, count = 0;
-    uint8_t *sector_buffer = (uint8_t *)os_malloc(sizeof(uint8_t) * SECTOR_SIZE);
+    uint8_t *sector_buffer;
 
     // 扫描文件索引表查找被标记文件
     if(tp == GC_TYPE_FILEBLOCK || tp == GC_TYPE_MAJOR) {
@@ -840,18 +906,14 @@ uint32_t ICACHE_FLASH_ATTR spifs_gc(GCType tp, uint32_t nums) {
     if(tp == GC_TYPE_DATAAREA || tp == GC_TYPE_MAJOR) {
     	count = (tp == GC_TYPE_DATAAREA) ? 0 : count;
     	for(fb_index = DATA_SECTOR_START; (fb_index < (DATA_SECTOR_END + 1) && count < nums); fb_index++) {
-			spi_flash_read(fb_index * SECTOR_SIZE, &offset, sizeof(uint32_t));
-			// LSB      MSB
-			// FF FF FF FF 空扇区不做处理
-			// F0 FF FF FF 有效数据扇区不做处理
-			// 00 FF FF FF 标记为废弃扇区需擦除
-			if(offset == SECTOR_DISCARD_FLAG) {
-				spi_flash_erase_sector(fb_index);
+    		if(spifs_ftl_get(FTL_ERASABLE_TABLE, fb_index)) {
+    			spifs_ftl_mark(FTL_ERASABLE_TABLE, fb_index, FTL_UNMARK);
+    			spifs_ftl_mark(FTL_WRITABLE_TABLE, fb_index, FTL_MARK);
+    			spi_flash_erase_sector(fb_index);
 				count++;
-			}
+    		}
 		}
     }
-
     return count;
 }
 
@@ -867,6 +929,8 @@ void ICACHE_FLASH_ATTR spifs_format() {
 	}
 	// 擦除数据区扇区
 	for(sector = DATA_SECTOR_START; sector < (DATA_SECTOR_END + 1); sector++) {
+		spifs_ftl_mark(FTL_ERASABLE_TABLE, sector, FTL_UNMARK);
+        spifs_ftl_mark(FTL_WRITABLE_TABLE, sector, FTL_MARK);
 		spi_flash_erase_sector(sector);
 	}
 }
@@ -883,6 +947,8 @@ BOOL ICACHE_FLASH_ATTR spifs_erase_sector(uint32_t sec) {
 		return TRUE;
 	}
 	if((sec >= DATA_SECTOR_START) && (sec < DATA_SECTOR_END + 1)) {
+		spifs_ftl_mark(FTL_ERASABLE_TABLE, sec, FTL_UNMARK);
+        spifs_ftl_mark(FTL_WRITABLE_TABLE, sec, FTL_MARK);
 		spi_flash_erase_sector(sec);
 		return TRUE;
 	}
@@ -894,13 +960,16 @@ BOOL ICACHE_FLASH_ATTR spifs_erase_sector(uint32_t sec) {
  * @return 空闲的扇区
  * */
 uint32_t ICACHE_FLASH_ATTR spifs_avail_sector() {
-    uint32_t i, temp, avail = 0;
+    uint32_t i, avail = 0;
+    uint32_t mark1, mark2;
+
     for(i = DATA_SECTOR_START; i < (DATA_SECTOR_END + 1); i++) {
-        spi_flash_read(i * SECTOR_SIZE, &temp, sizeof(uint32_t));
-        if(temp != SECTOR_INUSE_FLAG) {
-        	// SECTOR_DISCARD_FLAG & EMPTY_INT_VALUE都认为是空闲扇区
-            avail++;
-        }
+    	mark1 = spifs_ftl_get(FTL_ERASABLE_TABLE, i);
+    	mark2 = spifs_ftl_get(FTL_WRITABLE_TABLE, i);
+    	if(mark1 || mark2) {
+    		// SECTOR_DISCARD_FLAG & EMPTY_INT_VALUE都认为是空闲扇区
+    		avail++;
+    	}
     }
     return avail;
 }
@@ -912,10 +981,11 @@ uint32_t ICACHE_FLASH_ATTR spifs_avail_sector() {
 uint32_t ICACHE_FLASH_ATTR spifs_avail_files() {
     uint32_t sec_index, addr_start, addr_end, avail = 0;
     uint8_t fb_buffer[FILENAME_FULLSIZE];
+
     for(sec_index = FB_SECTOR_START; sec_index < (FB_SECTOR_END + 1); sec_index++) {
 
     	addr_start = sec_index * SECTOR_SIZE;
-        addr_end = (addr_start + SECTOR_SIZE - 1);
+        addr_end = (addr_start + SECTOR_SIZE);
 
         while((addr_end - addr_start) >= FILEBLOCK_SIZE) {
 
@@ -966,8 +1036,8 @@ static BOOL ICACHE_FLASH_ATTR filename_equals(uint8_t *src, uint8_t *target, uin
     	return FALSE;
     }
     for(; i < length; i += sizeof(uint32_t)) {
-        memcpy(&temp1, (src + i), sizeof(uint32_t));
-        memcpy(&temp2, (target + i), sizeof(uint32_t));
+        os_memcpy(&temp1, (src + i), sizeof(uint32_t));
+        os_memcpy(&temp2, (target + i), sizeof(uint32_t));
         if(temp1 != temp2) {
             return FALSE;
         }
@@ -983,7 +1053,7 @@ static BOOL ICACHE_FLASH_ATTR filename_equals(uint8_t *src, uint8_t *target, uin
 static BOOL fb_has_name(uint8_t *fb_buffer) {
 	uint32_t i = 0, temp;
     for(; i < FILENAME_FULLSIZE; i += sizeof(uint32_t)) {
-        memcpy(&temp, (fb_buffer + i), sizeof(uint32_t));
+        os_memcpy(&temp, (fb_buffer + i), sizeof(uint32_t));
         if(temp != EMPTY_INT_VALUE) {
             return TRUE;
         }

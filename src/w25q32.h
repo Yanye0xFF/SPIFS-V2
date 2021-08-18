@@ -7,7 +7,7 @@
 #include <string.h>
 
 // 1MB
-#define W25Q32_SIZE        1048576
+#define W25Q32_SIZE        4096*1024*1024
 #define W25Q32_FLASH_ID    0x401615
 
 void w25q32_allocate();

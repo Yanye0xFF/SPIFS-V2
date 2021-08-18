@@ -22,7 +22,7 @@ typedef enum _filestatevalue {
     FILE_STATE_DEFAULT = 1
 } FileStateValue;
 
-// 文件状态字 (1字节) 权限描述: x表示禁止, o表示允许; 置位状态值:0, 默认状态值:1
+// 文件状态字 (1字节) 权限描述: x表示禁止, o表示允许; 置为状态值:0, 默认状态值:1
 typedef struct _file_state {
     // delete 0:删除, 1:正常文件
     // 置位权限: 读x 写x 重命名x 打开x
@@ -140,12 +140,18 @@ typedef enum _write_method {
 #define SPIFS_USE_NULL_CHECK
 
 // 文件索引占用扇区号范围[FB_SECTOR_START ~ FB_SECTOR_END]
-#define FB_SECTOR_START     0
-#define FB_SECTOR_END       3
+#define FB_SECTOR_START     287
+#define FB_SECTOR_END       290
 
 // 文件数据区占用扇区号范围[DATA_SECTOR_START ~ DATA_SECTOR_END]
-#define DATA_SECTOR_START   4
-#define DATA_SECTOR_END     255
+#define DATA_SECTOR_START   291
+#define DATA_SECTOR_END     1018
+
+// FTL表大小，实际字节数量 = 32 * sizeof(uint32_t)
+// 索引整个flash 1024个扇区
+#define FTL_SIZE          (32)
+#define FTL_MARK          (1)
+#define FTL_UNMARK        (0)
 
 // 文件索引占用空间大小(字节)
 #define FILEBLOCK_SIZE         24
@@ -160,7 +166,6 @@ typedef enum _write_method {
 #define SECTOR_INUSE_FLAG      (0xFFFFFFFA)
 // 扇区数据废弃标记
 #define SECTOR_DISCARD_FLAG    (0xFFFFFFAA)
-
 // 空数据值, 适配flash擦除后全为1
 #define EMPTY_INT_VALUE        (0xFFFFFFFF)
 #define EMPTY_BYTE_VALUE       (0xFF)
@@ -217,6 +222,8 @@ uint32_t ICACHE_FLASH_ATTR list_file_raw(uint32_t *startAddr, uint8_t *buffer, u
 BOOL ICACHE_FLASH_ATTR read_finfo(File *file, FileInfo *finfo);
 
 uint32_t ICACHE_FLASH_ATTR spifs_gc(GCType tp, uint32_t nums);
+
+void ICACHE_FLASH_ATTR spifs_ftl_init(void);
 
 void ICACHE_FLASH_ATTR spifs_format();
 

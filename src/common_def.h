@@ -12,6 +12,11 @@
 #define os_malloc    malloc
 #define os_free      free
 
+#define BITS_OF_DOUBLE     (64)
+#define BITS_OF_FLOAT      (32)
+#define BITS_OF_INTEGER    (32)
+#define BITS_OF_SHORT      (16)
+#define BITS_OF_BYTE       (8)
 
 #define BOOL     uint8_t
 #define TRUE     1
